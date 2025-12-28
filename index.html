@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Personal Accounting</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <div class="appShell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">PA</div>
+        <div class="brandText">
+          <div class="brandTitle">Personal Accounting</div>
+          <div class="brandSub" id="brandSub">Offline-ready • Double-entry</div>
+        </div>
+      </div>
+
+      <div class="topbarRight">
+        <div class="pill" id="syncPill" title="Sync status">
+          <span class="dot" id="syncDot"></span>
+          <span id="syncText">Not signed in</span>
+        </div>
+        <button class="btn ghost" id="btnSettings" type="button">Settings</button>
+        <button class="btn" id="btnSignOut" type="button" style="display:none;">Sign out</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <aside class="sidebar">
+        <nav class="nav">
+          <button class="navItem active" data-route="dashboard">
+            <span>Dashboard</span>
+          </button>
+          <button class="navItem" data-route="journal">
+            <span>Journal Entry</span>
+          </button>
+          <button class="navItem" data-route="ledger">
+            <span>General Ledger</span>
+          </button>
+          <button class="navItem" data-route="trial">
+            <span>Trial Balance</span>
+          </button>
+          <button class="navItem" data-route="bs">
+            <span>Balance Sheet</span>
+          </button>
+          <button class="navItem" data-route="is">
+            <span>Income Statement</span>
+          </button>
+          <button class="navItem" data-route="coa">
+            <span>Chart of Accounts</span>
+          </button>
+        </nav>
+
+        <div class="sidebarFooter">
+          <div class="tiny">
+            <span class="kbd">Tip</span>
+            Use iPhone Safari “Add to Home Screen” for an app-like feel.
+          </div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <!-- Auth Gate -->
+        <section id="authGate" class="card authCard">
+          <div class="cardHeader">
+            <h2>Sign in</h2>
+            <p class="muted">Cloud sync across iPhone + PC via Firebase. Offline entries queue + sync later.</p>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <label>Email</label>
+              <input id="authEmail" type="email" placeholder="you@email.com" autocomplete="email" />
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn" id="btnSignIn" type="button">Sign in</button>
+            <button class="btn secondary" id="btnSignUp" type="button">Create account</button>
+            <div class="spacer"></div>
+            <button class="btn ghost" id="btnForgot" type="button">Forgot password</button>
+          </div>
+
+          <div class="alert warn">
+            <b>First time setup:</b> open <code>db.js</code> and paste your Firebase config.
+            See <code>README.md</code> for steps.
+          </div>
+        </section>
+
+        <!-- App Views -->
+        <section id="appViews" style="display:none;">
+          <div id="routeHost"></div>
+        </section>
+      </section>
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" style="display:none;">
+      <div id="toastText"></div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modalBackdrop" class="modalBackdrop" style="display:none;">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modalHeader">
+          <h3 id="modalTitle">Modal</h3>
+          <button class="iconBtn" id="modalClose" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="modalBody" id="modalBody"></div>
+        <div class="modalFooter" id="modalFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
