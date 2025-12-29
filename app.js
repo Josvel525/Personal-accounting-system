@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const {
     initFirebase,
     loadAll,
-    ensureDefaults,
     flushQueue,
     getQueueSize,
   } = await import("./db.js");
@@ -72,7 +71,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       state.user = user;
       showSignedIn();
 
-      await ensureDefaults(user.uid);
       await loadAll(user.uid);
 
       toast("Signed in and ready.");
