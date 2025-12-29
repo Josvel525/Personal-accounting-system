@@ -1,3 +1,7 @@
+document.body.insertAdjacentHTML(
+  "afterbegin",
+  "<div style='background:red;color:white;padding:10px'>APP.JS RUNNING</div>"
+);
 document.addEventListener("DOMContentLoaded", async () => {
   const { wireAuthUI } = await import("./auth.js");
   const {
