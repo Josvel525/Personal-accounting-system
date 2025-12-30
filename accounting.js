@@ -5,6 +5,16 @@
 
 import { safeNum, sum, groupBy } from "./utils.js";
 
+/* ================================
+   🔹 LEDGER HELPER (FIX)
+   ================================ */
+export function ledgerForAccount(accountId, journalLines = []) {
+  return journalLines.filter(l => l.accountId === accountId);
+}
+
+/* ================================
+   Validation & Normalization
+   ================================ */
 export function validateEntry(lines) {
   const totalDebit = sum(lines, (l) => safeNum(l.debit));
   const totalCredit = sum(lines, (l) => safeNum(l.credit));
@@ -31,6 +41,9 @@ export function filterByDate(headers, lines, { start = null, end = null } = {}) 
   return { headers: hs, lines: ls, headerIds };
 }
 
+/* ================================
+   Account Balances
+   ================================ */
 export function accountBalances(accounts, headers, lines, opts) {
   const accs = normalizeAccounts(accounts);
   const { lines: flines } = filterByDate(headers, lines, opts);
@@ -47,17 +60,17 @@ export function accountBalances(accounts, headers, lines, opts) {
   return balances;
 }
 
+/* ================================
+   Trial Balance
+   ================================ */
 export function trialBalance(accounts, headers, lines, opts) {
   const accs = normalizeAccounts(accounts).filter((a) => a.isActive !== false);
   const balances = accountBalances(accs, headers, lines, opts);
 
   const rows = accs.map((a) => {
     const bal = safeNum(balances.get(a.id)?.balance || 0);
-
-    // show positive debits/credits in TB columns
     const debit = (a.normalBalance === "Debit") ? Math.max(0, bal) : Math.max(0, -bal);
     const credit = (a.normalBalance === "Credit") ? Math.max(0, bal) : Math.max(0, -bal);
-
     return { account: a, debit, credit };
   });
 
@@ -68,6 +81,9 @@ export function trialBalance(accounts, headers, lines, opts) {
   return { rows, totalDebit, totalCredit, foots };
 }
 
+/* ================================
+   Income Statement
+   ================================ */
 export function incomeStatement(accounts, headers, lines, opts) {
   const accs = normalizeAccounts(accounts).filter((a) => a.isActive !== false);
   const balances = accountBalances(accs, headers, lines, opts);
@@ -87,6 +103,9 @@ export function incomeStatement(accounts, headers, lines, opts) {
   return { revenue, expenses, totalRevenue, totalExpense, netIncome };
 }
 
+/* ================================
+   Balance Sheet
+   ================================ */
 export function balanceSheet(accounts, headers, lines, opts) {
   const accs = normalizeAccounts(accounts).filter((a) => a.isActive !== false);
   const balances = accountBalances(accs, headers, lines, opts);
@@ -106,7 +125,6 @@ export function balanceSheet(accounts, headers, lines, opts) {
   const totalAssets = sum(assets, (x) => x.amount);
   const totalLiabilities = sum(liabilities, (x) => x.amount);
 
-  // Add cumulative net income into Retained Earnings display (personal-friendly roll-up)
   const end = opts?.end || null;
   const cumulative = incomeStatement(accs, headers, lines, { start: null, end });
   const cumNet = safeNum(cumulative.netIncome);
@@ -115,7 +133,7 @@ export function balanceSheet(accounts, headers, lines, opts) {
   const reIdx = equity.findIndex(
     (x) => x.account.name.toLowerCase() === "retained earnings"
   );
-  if (reIdx >= 0) equity[reIdx].amount = safeNum(equity[reIdx].amount) + cumNet;
+  if (reIdx >= 0) equity[reIdx].amount += cumNet;
 
   const totalEquity = sum(equity, (x) => x.amount);
   const balanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.000001;
@@ -133,6 +151,9 @@ export function balanceSheet(accounts, headers, lines, opts) {
   };
 }
 
+/* ================================
+   Ledger by Account (Grouped)
+   ================================ */
 export function ledgerByAccount(accounts, headers, lines, opts) {
   const { lines: flines } = filterByDate(headers, lines, opts);
   const accMap = new Map(accounts.map((a) => [a.id, a]));
@@ -158,7 +179,6 @@ export function ledgerByAccount(accounts, headers, lines, opts) {
     });
   }
 
-  // optional include empty
   if (opts?.includeEmpty) {
     for (const a of accounts) {
       if (!out.find((x) => x.account.id === a.id)) {
