@@ -1,3 +1,6 @@
+/**
+ * utils.js
+ */
 export const fmt = {
   money(n){
     const x = Number(n || 0);
@@ -13,7 +16,7 @@ export const fmt = {
   }
 };
 
-// This was the missing function causing the crash!
+// Fixed: Added missing function required by ui.js
 export function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
