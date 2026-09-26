@@ -292,3 +292,37 @@ textarea{min-height: 92px; resize: vertical}
 .bigNumber{font-size: 26px; font-weight: 900; letter-spacing: 0.2px}
 
 .authCard{max-width: 880px; margin: 0 auto}
+[hidden]{display:none!important}
+.content{min-width:0}
+#routeHost{margin-top:12px}
+.localOption{padding:14px 0;border-bottom:1px solid var(--border)}
+.localOption p{margin-top:10px;font-size:14px}
+.sectionSpace{margin:16px 0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;margin:24px 0}
+.tableWrap{overflow-x:auto;margin:16px 0;max-width:100%}
+.table td,.table th{vertical-align:top}
+.table .total{font-weight:800;background:rgba(122,166,255,.08)}
+.filters{align-items:flex-end;margin:18px 0}
+.journalLine{display:grid;grid-template-columns:minmax(160px,2fr) 1fr 1fr 40px;gap:10px;align-items:end;margin:12px 0}
+.journalLine input,.journalLine select{width:100%;min-width:0;display:block;margin-top:6px}
+.journalLine label{display:block}
+.accountForm{padding-bottom:12px;border-bottom:1px solid var(--border)}
+.btn:disabled{opacity:.5;cursor:wait;transform:none}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.toast{z-index:100}
+.modalBackdrop{z-index:50}
+.modal{max-height:90vh;overflow:auto}
+@media(max-width:1000px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:860px){
+  .main{flex-direction:column}.sidebar{display:block;width:100%;padding:10px;border-right:0;border-bottom:1px solid var(--border)}
+  .nav{display:flex;flex-direction:row;overflow-x:auto;padding:3px 2px 8px}.navItem{flex-shrink:0;white-space:nowrap}
+  .sidebarFooter{display:none}.topbar{position:static;flex-wrap:wrap;gap:12px}.topbarRight{flex-wrap:wrap;gap:6px}
+  input,select,textarea{font-size:16px}.journalLine{grid-template-columns:1fr 1fr 40px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+  .journalLine>.field:first-child{grid-column:1/-1}.filters .field{flex:1;min-width:130px}.bigNumber{font-size:23px}
+}
+@media print{
+  body{background:white;color:black}.sidebar,.topbar,#statusNotice,.filters button,.toast,.modalBackdrop{display:none!important}
+  .main,.content{display:block;padding:0;overflow:visible}.card{background:white;box-shadow:none;border:0;backdrop-filter:none}
+  .tableWrap{overflow:visible}.table th,.table td,.muted,.small,.badge{color:black}.table{border-color:#aaa}.table td{border-color:#ddd}
+  input,select{color:black;background:white;border:0}.table tr{break-inside:avoid}
+}

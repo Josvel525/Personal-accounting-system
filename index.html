@@ -15,14 +15,14 @@
         <div class="logo">PA</div>
         <div class="brandText">
           <div class="brandTitle">Personal Accounting</div>
-          <div class="brandSub" id="brandSub">Offline-ready • Double-entry</div>
+          <div class="brandSub" id="brandSub">Personal books • Double-entry</div>
         </div>
       </div>
 
       <div class="topbarRight">
         <div class="pill" id="syncPill" title="Sync status">
           <span class="dot" id="syncDot"></span>
-          <span id="syncText">Not signed in</span>
+          <span id="syncText">Choose local or cloud</span>
         </div>
         <button class="btn ghost" id="btnSettings" type="button">Settings</button>
         <button class="btn" id="btnSignOut" type="button" style="display:none;">Sign out</button>
@@ -67,17 +67,17 @@
         <!-- Auth Gate -->
         <section id="authGate" class="card authCard">
           <div class="cardHeader">
-            <h2>Sign in</h2>
-            <p class="muted">Cloud sync across iPhone + PC via Firebase. Offline entries queue + sync later.</p>
+            <h2>Your personal books</h2>
+            <p class="muted">Work in this browser, or sign in to access your cloud books.</p>
           </div>
 
-          <div class="grid2">
+          <div class="localOption"><button class="btn" id="btnLocal" type="button">Use on this device</button><p class="muted">No account needed. Local books stay in this browser; export backups in Settings.</p></div><h3>Cloud sign-in</h3><div class="grid2">
             <div class="field">
-              <label>Email</label>
+              <label for="authEmail">Email</label>
               <input id="authEmail" type="email" placeholder="you@email.com" autocomplete="email" />
             </div>
             <div class="field">
-              <label>Password</label>
+              <label for="authPassword">Password</label>
               <input id="authPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
             </div>
           </div>
@@ -89,21 +89,18 @@
             <button class="btn ghost" id="btnForgot" type="button">Forgot password</button>
           </div>
 
-          <div class="alert warn">
-            <b>First time setup:</b> open <code>db.js</code> and paste your Firebase config.
-            See <code>README.md</code> for steps.
-          </div>
+
         </section>
 
         <!-- App Views -->
         <section id="appViews" style="display:none;">
-          <div id="routeHost"></div>
+          <div id="statusNotice" class="alert warn" role="status" hidden></div><div id="routeHost"></div>
         </section>
       </section>
     </main>
 
     <!-- Toast -->
-    <div id="toast" class="toast" style="display:none;">
+    <div id="toast" class="toast" role="status" aria-live="polite" style="display:none;">
       <div id="toastText"></div>
     </div>
 

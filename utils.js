@@ -15,7 +15,7 @@ export const fmt = {
 
 // Fixed: Added missing function required by ui.js
 export function todayISO() {
-  return new Date().toISOString().split('T')[0];
+  return fmt.dateISO(new Date());
 }
 
 export function el(html){
@@ -50,4 +50,12 @@ export function groupBy(arr, keyFn){
 export function clampStr(s, max=220){
   const t = String(s ?? "").trim();
   return t.length > max ? t.slice(0, max) : t;
+}
+
+export function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+export function validDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+    && new Date(value + 'T12:00:00Z').toISOString().slice(0,10) === value;
 }
