@@ -5,9 +5,26 @@ import { createUI } from './ui.js';
 const $=id=>document.getElementById(id);
 const state={user:null,route:'dashboard',data:{accounts:[],journalHeaders:[],journalLines:[]},status:null};
 let toastTimer, generation=0;
+const menuButton=$('btnMenu'), menuPanel=$('navigationPanel');
+function setMenu(open,returnFocus=false){
+  menuPanel.hidden=!open;
+  menuButton.setAttribute('aria-expanded',String(open));
+  menuButton.setAttribute('aria-label',open?'Close navigation':'Open navigation');
+  if(open)menuPanel.style.setProperty('--menu-top',`${document.querySelector('.topbar').getBoundingClientRect().bottom+8}px`);
+  if(returnFocus)menuButton.focus();
+}
+menuButton.onclick=()=>setMenu(menuPanel.hidden);
+menuButton.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem').focus();}});
+$('btnCloseMenu').onclick=()=>setMenu(false,true);
+document.addEventListener('click',e=>{if(!menuPanel.hidden && !menuPanel.contains(e.target) && !menuButton.contains(e.target))setMenu(false);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape' && !menuPanel.hidden){e.preventDefault();setMenu(false,true);}});
+document.addEventListener('focusin',e=>{if(!menuPanel.hidden && !menuPanel.contains(e.target) && !menuButton.contains(e.target))setMenu(false);});
+window.addEventListener('resize',()=>{if(!menuPanel.hidden)setMenu(true);});
+$('workspaceDate').textContent=new Intl.DateTimeFormat(undefined,{month:'long',day:'numeric',year:'numeric'}).format(new Date());
+
 function toast(message,kind='good') {
   $('toastText').textContent=message;$('toast').style.display='block';
-  $('toast').style.background=kind==='bad'?'#8b2635':'#1e293b';
+  $('toast').classList.toggle('bad',kind==='bad');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',6000);
 }
 function render(){createUI(state,{toast}).render();}
@@ -33,7 +50,7 @@ async function enter(user){
 }
 function signedOut(){
   generation++;state.journalDirty=false;state.user=null;state.data={accounts:[],journalHeaders:[],journalLines:[]};
-  $('routeHost').replaceChildren();$('authGate').style.display='block';$('appViews').style.display='none';
+  $('currentSection').textContent='Welcome';setMenu(false);$('routeHost').replaceChildren();$('authGate').style.display='block';$('appViews').style.display='none';
   $('btnSignOut').style.display='none';$('brandSub').textContent='Personal books • Double-entry';$('syncText').textContent='Choose local or cloud';
 }
 $('btnLocal').onclick=async()=>{
@@ -46,7 +63,7 @@ $('btnSignOut').onclick=async()=>{
 for(const btn of document.querySelectorAll('.navItem'))btn.onclick=()=>{
   if(!state.user){toast('Choose local mode or sign in first.');return;}
   if(state.route==='journal' && state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
-  state.journalDirty=false;state.route=btn.dataset.route;render();
+  state.journalDirty=false;state.route=btn.dataset.route;render();setMenu(false);const heading=document.querySelector('#routeHost h2');if(heading){heading.tabIndex=-1;heading.focus();}
 };
 $('btnSettings').onclick=()=>{
   const body=$('modalBody'),footer=$('modalFooter');body.replaceChildren();footer.replaceChildren();

@@ -14,7 +14,13 @@ const submit=selector=>$(selector).dispatchEvent(new dom.window.Event('submit',{
 const wait=async(predicate)=>{for(let i=0;i<200;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}throw Error('Timed out: '+predicate.toString()+'\n'+document.body.textContent);};
 const nav=async route=>{click(`[data-route="${route}"]`);await wait(()=>!!$('#routeHost h2'));};
 test('complete local UI and persistence workflows with real DOM events and IndexedDB semantics',async()=>{
- await import('../app.js');click('#btnLocal');await wait(()=>$('#routeHost h2')?.textContent==='Dashboard');
+ await import('../app.js');
+ assert.equal($('#navigationPanel').hidden,true);
+ click('#btnMenu');assert.equal($('#btnMenu').getAttribute('aria-expanded'),'true');
+ document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ assert.equal($('#navigationPanel').hidden,true);assert.equal(document.activeElement,$('#btnMenu'));
+ click('#btnMenu');document.body.click();assert.equal($('#navigationPanel').hidden,true);
+ click('#btnLocal');await wait(()=>$('#routeHost h2')?.textContent==='Dashboard');
  const starter=[...document.querySelectorAll('#routeHost button')].find(b=>b.textContent==='Create starter accounts');starter.click();
  await wait(()=>$('#toastText').textContent==='Starter accounts created.');
  let saved=(await db.exportData(db.LOCAL_UID)).data;assert.equal(saved.accounts.length,9);

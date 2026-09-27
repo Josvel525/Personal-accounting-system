@@ -20,6 +20,7 @@ export function createUI(state,{toast}) {
   function go(route){state.route=route;render();}
   function card(title,subtitle=''){return el(`<section class="card"><div class="cardHeader"><h2>${title}</h2><p class="muted">${subtitle}</p></div></section>`);}
   function render(){
+    document.getElementById('currentSection').textContent=document.querySelector(`.navItem[data-route="${state.route}"]`)?.textContent.trim() || 'Dashboard';
     for(const b of document.querySelectorAll('.navItem')){b.classList.toggle('active',b.dataset.route===state.route);b.setAttribute('aria-current',b.dataset.route===state.route?'page':'false');}
     const view={dashboard,journal,ledger,trial,bs:balance,is:income,coa:accounts}[state.route] || dashboard;
     host.replaceChildren(view());
