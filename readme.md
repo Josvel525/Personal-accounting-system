@@ -1,6 +1,6 @@
 # Personal Accounting
 
-A mobile-friendly, double-entry personal accounting app. Plain browser JavaScript; no production build dependencies.
+A classic white, mobile-friendly, double-entry personal accounting app with raised blue buttons and top-left hamburger navigation. Plain browser JavaScript; no production build dependencies.
 
 ## Run on your computer
 
@@ -23,7 +23,7 @@ Open http://127.0.0.1:4173. You do not need `npm install` to run the app. A stat
 
 Local mode is **not cloud sync**. It uses this browser's IndexedDB and is separate from all signed-in users. Clearing site/browser data deletes local records. Anyone with access to that browser profile can open local books. JSON backups contain your financial records; keep them private. Restore is available only into empty local books, and validates entry balancing and record relationships before saving. Local books are not automatically uploaded when you sign in.
 
-After the initial visit finishes installing its service worker, local mode can reopen offline. Browser storage availability and retention depend on the browser. For code updates, close all tabs for this app and reopen; the waiting service worker activates after the older tabs close. When changing cached application files, change the cache version in `sw.js` as part of the same release.
+After the initial visit finishes installing its service worker, local mode can reopen offline. Browser storage availability and retention depend on the browser. For code updates, refresh after the new service worker installs. If an older screen remains in an open tab, close the app tabs and reopen. Activation never clears your accounting records. When changing cached application files, change the cache version in `sw.js` as part of the same release.
 
 ## Accounting behavior
 

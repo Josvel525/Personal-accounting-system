@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b1220" />
+  <meta name="theme-color" content="#ffffff" />
   <title>Personal Accounting</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -12,6 +12,7 @@
   <div class="appShell">
     <header class="topbar">
       <div class="brand">
+        <button class="menuToggle" id="btnMenu" type="button" aria-label="Open navigation" aria-controls="navigationPanel" aria-expanded="false"><span></span><span></span><span></span></button>
         <div class="logo">PA</div>
         <div class="brandText">
           <div class="brandTitle">Personal Accounting</div>
@@ -29,9 +30,11 @@
       </div>
     </header>
 
+    <div class="workspaceBar"><div>Accounting<span class="divider">/</span><strong id="currentSection">Welcome</strong></div><span class="workspaceDate" id="workspaceDate"></span></div>
     <main class="main">
-      <aside class="sidebar">
-        <nav class="nav">
+      <aside class="sidebar" id="navigationPanel" hidden>
+        <div class="menuHeading">Accounting menu<button class="iconBtn" id="btnCloseMenu" type="button" aria-label="Close navigation">×</button></div>
+        <nav class="nav" aria-label="Accounting navigation"><div class="navGroup">Workspace</div>
           <button class="navItem active" data-route="dashboard">
             <span>Dashboard</span>
           </button>
@@ -41,7 +44,7 @@
           <button class="navItem" data-route="ledger">
             <span>General Ledger</span>
           </button>
-          <button class="navItem" data-route="trial">
+          <div class="navGroup">Financial reports</div><button class="navItem" data-route="trial">
             <span>Trial Balance</span>
           </button>
           <button class="navItem" data-route="bs">
@@ -50,7 +53,7 @@
           <button class="navItem" data-route="is">
             <span>Income Statement</span>
           </button>
-          <button class="navItem" data-route="coa">
+          <div class="navGroup">Administration</div><button class="navItem" data-route="coa">
             <span>Chart of Accounts</span>
           </button>
         </nav>
