@@ -1,5 +1,5 @@
-const CACHE='personal-accounting-v4-reference';
-const FILES=['./','./index.html','./styles.css','./app.js','./ui.js','./auth.js','./db.js','./accounting.js','./utils.js'];
+const CACHE='personal-accounting-v5-modules';
+const FILES=['./','./index.html','./styles.css','./app.js','./ui.js','./auth.js','./db.js','./accounting.js','./utils.js','./settings.js','./validation.js','./operations.js','./modules-ui.js','./navigation.js'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('personal-accounting-') && k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{

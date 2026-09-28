@@ -1,7 +1,9 @@
 import { uid as idgen, validDate, clampStr } from './utils.js';
 import { TYPES, normalizeAccounts, validateEntry } from './accounting.js';
+import {COLLECTIONS,EXTRA_COLLECTIONS,completeData,settingsFor,validateSettings} from './settings.js';
+import {validateModules} from './validation.js';
 export const LOCAL_UID = '__local__';
-const empty = () => ({accounts:[],journalHeaders:[],journalLines:[]});
+const empty = () => completeData();
 const firebaseConfig = {
   apiKey: "AIzaSyCprWuMnOFI91MaWg5H63Ik3_MPWmi1JPM",
   authDomain: "personal-accounting-syst-2188a.firebaseapp.com",
@@ -97,7 +99,7 @@ async function persist(userId,makeOps) {
     const request=kv.get(snapshotKey(userId));
     request.onsuccess=()=>{
       try {
-        const data=request.result || empty(), ops=makeOps(data);
+        const data=completeData(request.result), ops=makeOps(data);
         if(!ops.length) return;
         const next=applyOps(data,ops);
         kv.put(next,snapshotKey(userId));
@@ -137,7 +139,7 @@ function withTimeout(promise) {
 export async function loadAll(userId) {
   return lock(userId,async()=>{
     const cached=await read('kv',snapshotKey(userId));
-    if(userId===LOCAL_UID) return {data:cached || empty(),source:'local',pending:0};
+    if(userId===LOCAL_UID) return {data:completeData(cached),source:'local',pending:0};
     let error;
     if(navigator.onLine) {
       try {
@@ -145,12 +147,18 @@ export async function loadAll(userId) {
         const s=await initFirebase();
         const names=['accounts','journalHeaders','journalLines'];
         const collections=await withTimeout(Promise.all(names.map(name=>s.f.getDocsFromServer(s.f.collection(s.db,'users',userId,name)))));
-        const data=Object.fromEntries(names.map((name,i)=>[name,collections[i].docs.map(d=>({...d.data(),id:d.id}))]));
+        const data=completeData({...cached,...Object.fromEntries(names.map((name,i)=>[name,collections[i].docs.map(d=>({...d.data(),id:d.id}))]))});
+        let modulesUnavailable=false;
+        try{
+          const extra=await withTimeout(Promise.all(EXTRA_COLLECTIONS.map(name=>s.f.getDocsFromServer(s.f.collection(s.db,'users',userId,name)))));
+          EXTRA_COLLECTIONS.forEach((name,i)=>data[name]=extra[i].docs.map(d=>({...d.data(),id:d.id})));
+          await write('kv',`${userId}:modules-ready`,true);
+        }catch{modulesUnavailable=true;await write('kv',`${userId}:modules-ready`,false);}
         await write('kv',snapshotKey(userId),data);
-        return {data,source:'cloud',pending:0};
+        return {data,source:'cloud',pending:0,modulesUnavailable};
       } catch(e) {error=e.message;}
     } else error='Offline. Cloud changes will sync when you reconnect.';
-    return {data:cached || empty(),source:'cache',pending:await getQueueSize(userId),error,unavailable:!cached};
+    return {data:completeData(cached),modulesUnavailable:userId!==LOCAL_UID && !await read('kv',`${userId}:modules-ready`),source:'cache',pending:await getQueueSize(userId),error,unavailable:!cached};
   });
 }
 const set=(collection,data)=>({type:'set',collection,id2:data.id,data});
@@ -168,21 +176,30 @@ export async function saveAccount(userId,account) {
 }
 export async function deleteAccount(userId,id) {
   return lock(userId,()=>persist(userId,data=>{
+    if(data.statements.some(x=>x.accountId===id) || data.reconciliations.some(x=>x.accountId===id) || Object.values(settingsFor(data)).includes(id))throw Error('This account is referenced by settings or statements and cannot be deleted.');
     if(data.journalLines.some(l=>l.accountId===id))throw Error('This account has posted entries. Disable it to preserve its history.');
     return [{type:'delete',collection:'accounts',id2:id}];
   }));
 }
-export async function postEntry(userId,entry) {
-  return lock(userId,()=>persist(userId,data=>{
+export function journalOperations(data,entry,source='journal') {
+    const prefs=settingsFor(data);
     if(!validDate(entry.date))throw Error('Enter a valid journal date.');
+    if(prefs.closedThrough && entry.date<=prefs.closedThrough)throw Error('This accounting period is closed. Change the closing date in Master Settings to reopen it.');
+    if(prefs.requireMemo && !String(entry.memo || '').trim())throw Error('A journal memo is required by Master Settings.');
     if(entry.lines.length>200 || !validateEntry(entry.lines).ok)throw Error('Use at least two lines, one positive debit or credit per line, two decimal places, and equal totals.');
     if(entry.lines.some(l=>!data.accounts.some(a=>a.id===l.accountId && a.isActive!==false)))throw Error('Choose an active account on every line.');
-    const header={id:idgen(),date:entry.date,memo:clampStr(entry.memo,500),ref:clampStr(entry.ref,100),createdAt:Date.now()};
+    if(entry.lines.some(l=>data.reconciliations.some(r=>r.accountId===l.accountId && entry.date<=r.end)))throw Error('This date is covered by a completed reconciliation. Use a later date for corrections.');
+    const header={id:idgen(),date:entry.date,memo:clampStr(entry.memo,500),ref:clampStr(entry.ref,100),source,createdAt:Date.now()};
     return [set('journalHeaders',header),...entry.lines.map(l=>set('journalLines',{
       id:idgen(),headerId:header.id,accountId:l.accountId,debit:Number(l.debit || 0),credit:Number(l.credit || 0),createdAt:header.createdAt
     }))];
-  }));
 }
+export async function postEntry(userId,entry) { return lock(userId,()=>persist(userId,data=>journalOperations(data,entry))); }
+export async function transactModules(userId,makeOps){
+ if(userId!==LOCAL_UID && !await read('kv',`${userId}:modules-ready`))throw Error('These modules need updated Firebase permissions before cloud use. Local books support them now.');
+ return lock(userId,()=>persist(userId,makeOps));
+}
+export const saveSettings=(userId,value)=>transactModules(userId,data=>[set('preferences',validateSettings(value,data))]);
 export async function createStarterAccounts(userId) {
   return lock(userId,()=>persist(userId,data=>{
     if(data.accounts.length)throw Error('Starter accounts are available only for an empty chart.');
@@ -190,11 +207,12 @@ export async function createStarterAccounts(userId) {
     return seed.map(([code,name,type])=>set('accounts',normalizeAccounts([{id:idgen(),code,name,type,isActive:true,createdAt:Date.now()}])[0]));
   }));
 }
-export async function exportData(userId) {return {version:1,exportedAt:new Date().toISOString(),data:(await read('kv',snapshotKey(userId))) || empty()};}
+export async function exportData(userId) {return {version:2,exportedAt:new Date().toISOString(),data:completeData(await read('kv',snapshotKey(userId)))};}
 export function validateBackup(backup) {
-  if(backup.version!==1 || !backup.data)throw Error('Choose a version 1 Personal Accounting JSON backup.');
-  const data=backup.data;
-  for(const name of ['accounts','journalHeaders','journalLines']) {
+  if(![1,2].includes(backup.version) || !backup.data)throw Error('Choose a version 1 or 2 Personal Accounting JSON backup.');
+  const data=structuredClone(backup.data);
+  if(backup.version===1)for(const name of EXTRA_COLLECTIONS)if(data[name]===undefined)data[name]=[];
+  for(const name of COLLECTIONS) {
     if(!Array.isArray(data[name]))throw Error('Backup is missing accounting records.');
     const ids=new Set();
     for(const item of data[name]) {
@@ -207,13 +225,14 @@ export function validateBackup(backup) {
   if(data.journalHeaders.some(h=>!validDate(h.date)))throw Error('Backup contains invalid dates.');
   if(data.journalLines.some(l=>!data.accounts.some(a=>a.id===l.accountId) || !data.journalHeaders.some(h=>h.id===l.headerId)))throw Error('Backup contains orphaned journal lines.');
   if(data.journalHeaders.some(h=>!validateEntry(data.journalLines.filter(l=>l.headerId===h.id)).ok))throw Error('Backup contains an unbalanced or invalid entry.');
+  validateModules(data);
   return data;
 }
 export async function importLocalBackup(userId,backup) {
   if(userId!==LOCAL_UID)throw Error('Restore is available in local mode only.');
   const data=validateBackup(backup);
   return lock(userId,()=>persist(userId,current=>{
-    if(current.accounts.length || current.journalHeaders.length || current.journalLines.length)throw Error('Restore requires empty local books to prevent overwriting existing records.');
-    return Object.entries(data).filter(([name])=>['accounts','journalHeaders','journalLines'].includes(name)).flatMap(([name,items])=>items.map(item=>set(name,item)));
+    if(COLLECTIONS.some(name=>current[name].length))throw Error('Restore requires empty local books to prevent overwriting existing records.');
+    return Object.entries(data).filter(([name])=>COLLECTIONS.includes(name)).flatMap(([name,items])=>items.map(item=>set(name,item)));
   }));
 }
