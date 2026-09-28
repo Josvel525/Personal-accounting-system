@@ -162,8 +162,7 @@ export async function loadAll(userId) {
   });
 }
 const set=(collection,data)=>({type:'set',collection,id2:data.id,data});
-export async function saveAccount(userId,account) {
-  return lock(userId,()=>persist(userId,data=>{
+export function accountOperations(data,account){
     const normalized=normalizeAccounts([account])[0];
     normalized.name=clampStr(normalized.name,120);normalized.code=clampStr(normalized.code,30);
     if(!normalized.name || !TYPES.includes(normalized.type))throw Error('Enter an account name and valid type.');
@@ -172,8 +171,9 @@ export async function saveAccount(userId,account) {
     if(old && data.journalLines.some(l=>l.accountId===old.id) && (old.type!==normalized.type || old.normalBalance!==normalized.normalBalance))
       throw Error('An account with posted entries must keep its type and normal balance.');
     return [set('accounts',{...normalized,id:normalized.id || idgen(),createdAt:old?.createdAt || Date.now()})];
-  }));
 }
+export const transactBooks=(userId,fn)=>lock(userId,()=>persist(userId,fn));
+export const saveAccount=(userId,account)=>transactBooks(userId,data=>accountOperations(data,account));
 export async function deleteAccount(userId,id) {
   return lock(userId,()=>persist(userId,data=>{
     if(data.statements.some(x=>x.accountId===id) || data.reconciliations.some(x=>x.accountId===id) || Object.values(settingsFor(data)).includes(id))throw Error('This account is referenced by settings or statements and cannot be deleted.');

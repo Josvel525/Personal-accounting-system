@@ -53,9 +53,29 @@ Create a liability account for Accounts payable in Chart of Accounts (for exampl
 
 Daily Expenses debit an expense and credit a bank/cash asset or credit-card liability. Transfers and card payments debit the receiving asset/liability and credit the source bank asset. Posted documents are preserved; this release does not include invoice credit notes, vendor refunds, recurring bills, approval workflows, multi-currency accounting, or live bank connections.
 
+### CSV imports and downloadable templates
+
+**Import CSV** and **Download Template** appear together in Chart of Accounts, Journal Entry, Review Journal, General Ledger, Vendors, AP Invoices, Invoice Payments, Daily Expenses, Transfers & Card Payments, and Bank & Card Statements. Journal Entry, Review Journal, and General Ledger share the journal-line format. Vendors are shared with Accounts Payable. Reports calculate from posted transactions; import their source records in the corresponding module.
+
+Templates contain the exact column headers and no sample transactions. Fill rows below the headers, save as UTF-8 CSV, then choose **Import CSV**. The import dialog explains the fields, validates the whole file, displays a preview, and asks you to import the prepared records. If any row is invalid, nothing in that file is saved. Errors identify CSV line numbers. Imports add records; they never overwrite existing records.
+
+- Import **accounts**, then **vendors**, before transactions that reference them. Import invoices before their payments.
+- Match existing **account codes** and **vendor names**. Keep account codes as text in your spreadsheet to preserve leading zeros.
+- Use **YYYY-MM-DD** dates and plain numbers with at most two decimal places. Do not include currency symbols or thousands separators in bulk templates.
+- Journal lines repeat the same `entry_id`, date, reference, and memo for each entry. Fill debit or credit on each line; the entry must balance.
+- Invoices, payments, expenses, and transfers require a unique `import_id` for each record. Journal `entry_id` and statement `statement_id` also identify imported groups. These identifiers are remembered to reject repeat imports, including after a JSON backup restore. Account codes, vendor names, and vendor/invoice numbers have their own duplicate checks.
+- Bulk statements repeat the statement details on every transaction row. To import a single bank transaction file without repeated metadata, use the form in **Reconciliation** or **Bank & Card Statements**, with its three-column transaction template.
+- Bulk files are limited to **2,000 data rows / 2 MB**. Signed-in cloud imports must create at most **450 stored records** per file so the whole file fits in one atomic batch. A journal includes a header and lines; an invoice/payment includes those plus its business document. Oversized batches are rejected before saving.
+
+All posting controls still apply: active accounts, balanced journals, valid dates, invoice balances, closed periods, and completed reconciliations. CSV import does not bypass them. Local imports are committed to IndexedDB and included in JSON backups.
+
 ### Statement import and reconciliation
 
 Upload a CSV with `date,description,amount` headers (see `examples/statement-template.csv`). Use YYYY-MM-DD dates. For bank/debit-card accounts, deposits are positive and withdrawals negative. For credit cards with a credit normal balance, charges are positive and payments negative. Files may contain up to 2,000 rows and 1 MB of text. Opening balance plus signed transactions must equal closing balance. CSV import does not create journal entries; post missing activity before matching it. PDF/OCR statement extraction is not included.
+
+In **Reconciliation**, use the adjacent **Import CSV** and **Download Template** buttons to upload bank transactions directly. After import, the screen displays **Imported bank transactions** and **System transactions** side by side on desktop and stacked on phones. Check one item on each side and choose **Match selected pair**. Cleared pairs remain checked; **Show unmatched only** reveals what is left on both sides. Use **Unmatch** to correct a pair before completion.
+
+For missing book activity such as a bank fee, select its bank row and choose **Add adjustment**. Review the prefilled date, signed amount, and memo, select the offset account, and post the adjustment. This creates a balanced journal entry, which you then match. Nothing is silently written off.
 
 Match each statement row to an existing transaction on the same account for the exact signed amount. A book transaction may be matched only once. Older outstanding transactions can be matched when they clear. Complete statements chronologically: opening balance must equal the previous completed closing balance, every row must be matched, and adjusted book balance must equal statement balance exactly. Unmatched book activity is shown as outstanding.
 
@@ -116,7 +136,7 @@ npm ci
 npm test
 ```
 
-Tests cover accounting invariants, date filters, contra balances, disabled history, backup validation, UI form events, storage persistence, atomic local journal saving, and per-user pending queues. DOM/storage integration tests use jsdom and fake-indexeddb, not a real browser or live Firebase account.
+Tests cover accounting invariants, date filters, contra balances, disabled history, backup validation, UI form events, storage persistence, atomic local journal saving, and per-user pending queues. CSV tests also cover template formats, row diagnostics, all-or-nothing saves, duplicate import IDs, invoice payment limits, signed bank adjustments, and cloud batch limits. DOM/storage integration tests use jsdom and fake-indexeddb, not a real browser or live Firebase account.
 
 An optional real-browser regression script is included:
 
@@ -127,6 +147,7 @@ npx playwright install chromium
 node tests/browser.mjs
 node tests/persistence-browser.mjs
 node tests/modules-browser.mjs
+node tests/csv-browser.mjs
 ```
 
 Set `TEST_BASE_URL` for another test deployment. It uses isolated browser profiles and only local-mode sample transactions, never your cloud books.

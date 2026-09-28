@@ -1,0 +1,48 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {indexedDB} from 'fake-indexeddb';
+import * as db from '../db.js';
+import {CSV_TYPES,templateCSV,prepareCSVImport,importCSV} from '../csv-import.js';
+import {readCSV,encodeCSV} from '../csv-utils.js';
+import {completeData} from '../settings.js';
+import {trialBalance} from '../accounting.js';
+import {reconciliationCheck,postReconciliationAdjustment,matchStatementRow,finishReconciliation} from '../operations.js';
+Object.defineProperty(globalThis,'indexedDB',{value:indexedDB,configurable:true});Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});
+const csv=(kind,rows)=>encodeCSV(CSV_TYPES[kind].headers,rows.map(row=>CSV_TYPES[kind].headers.map(h=>row[h] ?? ''))),user=db.LOCAL_UID;
+const data=async()=>(await db.exportData(user)).data;
+test('templates, atomic whole-file imports, dependent documents, idempotence and bank adjustments',async()=>{
+ for(const kind of Object.keys(CSV_TYPES))assert.throws(()=>prepareCSVImport(kind,templateCSV(kind),completeData()),/headers only/);
+ const accounts=csv('accounts',[{code:'0100',name:'Bank',type:'Asset'},{code:'2000',name:'Card',type:'Liability'},{code:'2100',name:'AP',type:'Liability'},{code:'3000',name:'Equity',type:'Equity'},{code:'5000',name:'Expense',type:'Expense'}]);
+ await importCSV(user,'accounts',accounts);let d=await data();assert.equal(d.accounts[0].code,'0100');
+ const vendors=csv('vendors',[{name:'Vendor, Inc.',email:'ap@example.com',notes:'Line 1\nLine "2"'},{name:'Second vendor'}]);await importCSV(user,'vendors',vendors);
+ const before=await data();await assert.rejects(importCSV(user,'vendors',csv('vendors',[{name:'Would be valid'},{name:'Vendor, Inc.'}])),/already exists/);assert.deepEqual(await data(),before);
+ await assert.rejects(importCSV(user,'accounts',accounts),/already in use/);
+ const opening=csv('journal',[{entry_id:'opening-1',date:'2026-01-01',memo:'Opening',account_code:'0100',debit:'1000'},{entry_id:'opening-1',date:'2026-01-01',memo:'Opening',account_code:'3000',credit:'1000'}]);await importCSV(user,'journal',opening);
+ await assert.rejects(importCSV(user,'journal',opening),/already used/);
+ const invoices=csv('invoices',[{import_id:'inv-1',vendor_name:'Vendor, Inc.',invoice_number:'A001',date:'2026-01-02',due_date:'2026-01-31',amount:100,expense_account_code:'5000',payable_account_code:'2100'}]);await importCSV(user,'invoices',invoices);
+ const pay=amount=>({import_id:'pay-'+amount,vendor_name:'Vendor, Inc.',invoice_number:'A001',date:'2026-01-03',amount,payment_account_code:'0100'});
+ const prepay=await data();await assert.rejects(importCSV(user,'payments',csv('payments',[pay(60),pay(50)])),/exceeds/);assert.deepEqual(await data(),prepay);
+ await importCSV(user,'payments',csv('payments',[pay(60),pay(40)]));
+ await assert.rejects(importCSV(user,'payments',csv('payments',[pay(60)])),/already used/);
+ await importCSV(user,'expenses',csv('expenses',[{import_id:'e1',date:'2026-01-04',payee:'Grocer',amount:25,payment_method:'debit',expense_account_code:'5000',payment_account_code:'0100'}]));
+ await importCSV(user,'transfers',csv('transfers',[{import_id:'t1',date:'2026-01-05',amount:20,from_account_code:'0100',to_account_code:'2000'}]));
+ const common={statement_id:'jan',account_code:'0100',statement_name:'January',period_start:'2026-01-01',period_end:'2026-01-31',opening_balance:0,closing_balance:850};
+ await importCSV(user,'statements',csv('statements',[{...common,date:'2026-01-01',description:'Opening',amount:1000},{...common,date:'2026-01-03',description:'Pay 60',amount:-60},{...common,date:'2026-01-03',description:'Pay 40',amount:-40},{...common,date:'2026-01-04',description:'Grocer',amount:-25},{...common,date:'2026-01-05',description:'Card payment',amount:-20},{...common,date:'2026-01-06',description:'Bank fee',amount:-5}]));
+ d=await data();const bank=d.accounts.find(a=>a.code==='0100'),expense=d.accounts.find(a=>a.code==='5000'),s=d.statements[0];
+ await postReconciliationAdjustment(user,{accountId:bank.id,offsetAccount:expense.id,date:'2026-01-06',amount:-5,memo:'Bank fee'});
+ d=await data();const books=reconciliationCheck(d,s).books;for(const row of s.rows)await matchStatementRow(user,s.id,row.id,books.find(b=>b.date===row.date && b.amount===row.amount).id);
+ await finishReconciliation(user,s.id);d=await data();assert.equal(trialBalance(d.accounts,d.journalHeaders,d.journalLines).foots,true);assert.equal(d.statements[0].status,'reconciled');
+ const backup=await db.exportData(user);assert.equal(db.validateBackup(backup).invoices.length,1);assert.ok(backup.data.journalHeaders.some(h=>h.csvImportKey==='expenses:e1'));
+ // Re-previewing never reserves an ID or changes any books.
+ const newVendor=csv('vendors',[{name:'Preview only'}]);prepareCSVImport('vendors',newVendor,d);assert.deepEqual(await data(),d);
+});
+test('strict parser, row diagnostics, quote handling and cloud transaction limit',()=>{
+ assert.equal(readCSV('\uFEFFname,notes\r\n"A, B","first\nsecond"').records[0].values.notes,'first\nsecond');
+ assert.throws(()=>readCSV('name,name\nA,B'),/unique/);
+ assert.throws(()=>readCSV('name,notes\nA,"unfinished'),/unclosed/);
+ assert.throws(()=>readCSV('name,notes\nA,"quote"junk'),/unexpected/);
+ assert.throws(()=>prepareCSVImport('vendors','name,email\nValid,valid@example.com\nInvalid,bad',completeData()),/Line 3/);
+ assert.throws(()=>prepareCSVImport('vendors','name,unknown\nVendor,value',completeData()),/Unexpected/);
+ const rows=Array.from({length:451},(_,i)=>({name:'Vendor '+i}));assert.throws(()=>prepareCSVImport('vendors',csv('vendors',rows),completeData(),{cloud:true}),/atomic cloud save/);
+ assert.equal(prepareCSVImport('vendors',csv('vendors',rows),completeData()).count,451);
+});
