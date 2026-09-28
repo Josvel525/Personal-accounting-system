@@ -20,6 +20,11 @@ test('complete local UI and persistence workflows with real DOM events and Index
  document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
  assert.equal($('#navigationPanel').hidden,true);assert.equal(document.activeElement,$('#btnMenu'));
  click('#btnMenu');document.body.click();assert.equal($('#navigationPanel').hidden,true);
+ fill('#menuSearch','balance');assert.equal($('#navigationPanel').hidden,false);assert.equal(document.querySelectorAll('.navItem:not([hidden])').length,2);
+ fill('#menuSearch','no such page');assert.equal($('#menuEmpty').hidden,false);
+ document.body.click();assert.equal($('#menuSearch').value,'');
+ click('#btnMenu');click('#btnMenuSetup');assert.equal(document.querySelector('[data-menu-column="reports"]').hidden,true);
+ click('#btnMenuAll');assert.equal(document.querySelector('[data-menu-column="reports"]').hidden,false);document.body.click();
  click('#btnLocal');await wait(()=>$('#routeHost h2')?.textContent==='Dashboard');
  const starter=[...document.querySelectorAll('#routeHost button')].find(b=>b.textContent==='Create starter accounts');starter.click();
  await wait(()=>$('#toastText').textContent==='Starter accounts created.');
@@ -37,7 +42,7 @@ test('complete local UI and persistence workflows with real DOM events and Index
  await nav('bs');assert.match($('#routeHost').textContent,/Balance sheet balances/);assert.match($('#routeHost').textContent,/200.20/);
  await nav('is');fill('#reportStart','2026-02-02');fill('#reportEnd','2026-02-02');submit('.filters');assert.match($('.bigNumber').textContent,/-\$50.10/);
  await nav('ledger');fill('#ledgerAccount',cash.id);fill('#reportStart','2026-02-02');fill('#reportEnd','2026-02-02');submit('.filters');assert.match($('#routeHost').textContent,/1,250.30/);assert.match($('#routeHost').textContent,/1,200.20/);
- await nav('coa');fill('#accountCode','5400');fill('#accountName','<img src=x onerror=alert(1)>');fill('#accountType','Expense');fill('#accountNormal','Debit');$('#toastText').textContent='';submit('.accountForm');await wait(()=>$('#toastText').textContent==='Account saved.');assert.equal($('#routeHost img'),null);assert.match($('#routeHost').textContent,/<img src=x onerror=alert\(1\)>/);
+ await nav('coa');click('[data-add-account]');fill('#accountCode','5400');fill('#accountName','<img src=x onerror=alert(1)>');fill('#accountType','Expense');fill('#accountNormal','Debit');$('#toastText').textContent='';submit('.accountForm');await wait(()=>$('#toastText').textContent==='Account saved.');assert.equal($('#routeHost img'),null);assert.match($('#routeHost').textContent,/<img src=x onerror=alert\(1\)>/);
  await assert.rejects(db.deleteAccount(db.LOCAL_UID,cash.id),/posted entries/);
  await db.saveAccount(db.LOCAL_UID,{...cash,isActive:false});
  click('#btnSignOut');click('#btnLocal');await wait(()=>$('#routeHost h2')?.textContent==='Dashboard');await nav('trial');assert.match($('#routeHost').textContent,/Debits equal credits/);

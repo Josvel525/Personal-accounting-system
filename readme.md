@@ -1,6 +1,6 @@
 # Personal Accounting
 
-A classic white, mobile-friendly, double-entry personal accounting app with raised blue buttons and top-left hamburger navigation. Plain browser JavaScript; no production build dependencies.
+A double-entry personal accounting app with a white workspace, charcoal application header, blue menu selections, outlined toolbar buttons, and compact banded accounting tables. Desktop has a wide application menu; phone screens use a touch-friendly drawer and independently scrollable tables. Plain browser JavaScript; no production build dependencies.
 
 ## Run on your computer
 
@@ -11,6 +11,20 @@ npm start
 ```
 
 Open http://127.0.0.1:4173. You do not need `npm install` to run the app. A static HTTPS host such as GitHub Pages works too. Do not open `index.html` as a `file://` URL; browser modules and storage require an HTTP origin.
+
+## Textastic and other local preview apps
+
+1. Download the **entire project folder**, keeping `index.html`, the JavaScript files, `styles.css`, and `sw.js` together. In Textastic, put the folder in **Local Files**, **iCloud**, or a folder added using **Add External Folder**. Opening only an individual HTML file can prevent access to its linked files.
+2. In **Textastic → Settings → Web Preview**, turn **Random Port off** and use a fixed port, such as **8080**.
+3. Open `index.html` with Web Preview. You can use **Preview in Safari**; keep using the same browser/app and exact address for these books.
+4. Choose **Use on this device**. The app verifies that local database writes can be committed and read before opening local books. Accounts and posted journal entries are saved to IndexedDB before a success message appears.
+5. Closing/reopening the browser or refreshing does not intentionally clear records. Different browsers, private sessions, hostnames, ports, and the hosted GitHub site each have separate storage. Keeping source files in iCloud does **not** sync the accounting database.
+6. In **Settings**, inspect local storage details and use **Request persistent storage** if available. This is optional browser protection, not a permanent-storage guarantee.
+7. Use **Settings → Export backup** and save the JSON to Files/iCloud Drive. If moving from Textastic to Safari or another address, export first and restore into empty local books there. iOS, browser/app-data deletion, and private preview modes can remove local records; the HTML file itself does not contain your books.
+
+These rules also apply to comparable preview tools: use an HTTP local server with a stable origin and persistent website storage. A preview tool that clears its web data cannot be made durable by this web app. The application does not fall back to unsaved in-memory books if local storage is unavailable.
+
+Textastic references: [Web Preview](https://www.textasticapp.com/v10/manual/viewing_editing_files/web_preview.html) and [fixed preview port](https://www.textasticapp.com/v10/manual/settings/web_preview.html). Textastic's specific iOS webview retention still needs an on-device close/reopen check; automated checks cover persistent Chromium profiles.
 
 ## Start using it
 
@@ -85,6 +99,7 @@ npm install --no-save playwright
 npx playwright install chromium
 # In another terminal: npm start
 node tests/browser.mjs
+node tests/persistence-browser.mjs
 ```
 
 Set `TEST_BASE_URL` for another test deployment. It uses isolated browser profiles and only local-mode sample transactions, never your cloud books.

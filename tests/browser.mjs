@@ -17,6 +17,7 @@ try{
  await nav('Create starter accounts');await page.getByText('0 posted entries',{exact:true}).waitFor();
  await nav('Chart of Accounts');await page.getByText('Checking',{exact:true}).waitFor();
  // Custom account and escaped user-provided text.
+ await page.locator('[data-add-account]').click();
  await page.getByLabel('Code',{exact:true}).fill('5400');await page.getByLabel('Name',{exact:true}).fill('<img src=x onerror=alert(1)>');
  await page.getByLabel('Type',{exact:true}).selectOption('Expense');await nav('Save account');
  await page.getByText('<img src=x onerror=alert(1)>',{exact:true}).waitFor();assert.equal(await page.locator('#routeHost img').count(),0);
@@ -47,12 +48,30 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.equal(await page.locator('#navigationPanel').isVisible(),false);
  await page.locator('#btnMenu').click();assert.equal(await page.locator('#navigationPanel').isVisible(),true);
- await page.screenshot({path:'/tmp/personal-accounting-mobile.png',fullPage:true});
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'/tmp/reference-mobile.png',fullPage:true});
  await page.keyboard.press('Escape');assert.equal(await page.locator('#navigationPanel').isVisible(),false);
  await context.setOffline(false);await page.setViewportSize({width:1440,height:1000});await nav('Dashboard');assert.equal(await page.evaluate(()=>getComputedStyle(document.body).backgroundColor),'rgb(255, 255, 255)');
  await page.locator('#btnMenu').click();
- await page.screenshot({path:'/tmp/personal-accounting-desktop.png',fullPage:true});
- await page.locator('#routeHost h2').click();assert.equal(await page.locator('#navigationPanel').isVisible(),false);
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'/tmp/reference-menu.png',fullPage:true});
+ await page.locator('.brandTitle').click();assert.equal(await page.locator('#navigationPanel').isVisible(),false);
+ await nav('Chart of Accounts');
+ await page.getByLabel('Search accounts').fill('Checking');assert.equal(await page.locator('tbody tr:visible').count(),1);
+ await page.getByLabel('Status',{exact:true}).selectOption('active');assert.equal(await page.locator('tbody tr:visible').count(),0);
+ await page.getByLabel('Search accounts').fill('');await page.getByLabel('Status',{exact:true}).selectOption('all');
+ // Use a benign label for the screenshot after verifying HTML escaping.
+ const escapedRow=page.getByRole('row').filter({has:page.getByText('<img src=x onerror=alert(1)>',{exact:true})});
+ await escapedRow.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Name',{exact:true}).fill('Health & wellness');await nav('Save account');
+ await page.evaluate(()=>window.scrollTo(0,0));await page.locator('#toast').waitFor({state:'hidden'});await page.screenshot({path:'/tmp/reference-accounts.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'/tmp/reference-mobile-accounts.png',fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ for(const width of [320,768,1440]){
+  await page.setViewportSize({width,height:900});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No page overflow at ${width}px`);
+ }
+ await page.getByLabel('Search menu',{exact:true}).fill('balance');
+ assert.equal(await page.locator('.navItem:visible').count(),2);
+ await page.keyboard.press('ArrowDown');assert.equal(await page.locator('.navItem:focus').count(),1);
+ await page.keyboard.press('Escape');assert.equal(await page.locator('#navigationPanel').isVisible(),false);
  // Restore into an independent empty browser, not over existing books.
  const restoreContext=await browser.newContext();const restorePage=await restoreContext.newPage();await restorePage.goto(base);await restorePage.getByRole('button',{name:'Use on this device',exact:true}).click();
  await restorePage.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();await restorePage.getByRole('button',{name:'Settings',exact:true}).click();
