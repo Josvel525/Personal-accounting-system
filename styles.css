@@ -239,3 +239,19 @@ details summary { cursor:pointer; color:#0a7496; padding:6px 0; }
 @media print{.moduleTabs,.moduleForm,.settingsForm,.tableHint{display:none!important;}.printBookName{display:block;flex-basis:100%;font-size:16px;font-weight:bold;}details:not([open])>*:not(summary){display:block!important;}}
 .sectionContext { min-width:0; overflow:hidden; }
 .sectionContext strong { display:block; overflow:hidden; text-overflow:ellipsis; }
+.csvTools { display:inline-flex; gap:8px; flex-wrap:wrap; }
+.csvResult { margin-top:16px; overflow-wrap:anywhere; }
+.csvResult li { margin:7px 0; color:#a43840; }
+.csvResult .tableWrap { max-height:300px; }
+.modal:has(.csvResult) { width:min(980px,100%); }
+.reconcileImport { margin-bottom:24px; }
+.reconcileCompare { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; margin:14px 0; }
+.comparePanel { min-width:0; padding:14px; border:1px solid #cbdce5; background:#fff; }
+.comparePanel h3 { margin:0 0 5px; color:#187395; }
+.comparePanel .tableWrap { max-height:520px; }
+.comparePanel input[type=checkbox] { width:20px; height:20px; min-height:20px; }
+.comparePanel .table td:nth-child(2) { min-width:130px; overflow-wrap:anywhere; }
+.comparePanel .table td:last-child { white-space:normal; }
+.compareToolbar { padding:12px; background:#f1f6f8; border:1px solid #d5e1e7; }
+@media(max-width:760px){.reconcileCompare{grid-template-columns:1fr;}.comparePanel{padding:10px;}.csvTools{width:100%;}.cardHeader .headerActions{flex-wrap:wrap;}.comparePanel .tableWrap{max-height:360px;}}
+@media print{.csvTools,.compareToolbar,.reconcileImport,.adjustmentPanel{display:none!important;}.reconcileCompare{display:block;}.comparePanel .tableWrap{max-height:none;}}

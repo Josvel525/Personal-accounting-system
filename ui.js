@@ -1,3 +1,4 @@
+import {attachCSVControls} from './csv-ui.js';
 import {createModules} from './modules-ui.js';
 import {settingsFor,periodStart} from './settings.js';
 import {moduleFor,routeTitle} from './navigation.js';
@@ -36,6 +37,8 @@ export function createUI(state,{toast}) {
     if(module?.pages.length){const tabs=el('<nav class="moduleTabs" aria-label="Module pages"></nav>');for(const [id,title] of module.pages){const b=el(`<button class="${id===state.route?'selected':''}" type="button">${esc(title)}</button>`);b.onclick=()=>go(id);tabs.append(b);}host.append(tabs);}
     if(state.status?.modulesUnavailable)host.append(el('<p class="alert">Cloud access to the new modules is unavailable. Update Firebase permissions for the additional collections before using Master Settings and Expenses with cloud books. Existing financial reports remain available.</p>'));
     const content=view();host.append(content);
+    const csvKind={coa:'accounts',journal:'journal',review:'journal',ledger:'journal',vendors:'vendors',invoices:'invoices',payments:'payments',expenses:'expenses',transfers:'transfers',statements:'statements'}[state.route];
+    if(csvKind)attachCSVControls(content,csvKind,{state,toast});
     for(const form of content.querySelectorAll('form[data-dirty],.accountForm')){for(const event of ['input','change'])form.addEventListener(event,()=>state.journalDirty=true);}
   }
 

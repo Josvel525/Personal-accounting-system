@@ -1,3 +1,4 @@
+import {readCSV} from './csv-utils.js';
 import {uid,validDate,clampStr} from './utils.js';
 import {cents,dollars,accountBalances} from './accounting.js';
 import {transactModules,journalOperations} from './db.js';
@@ -10,12 +11,13 @@ export function moneyValue(value,positive=false){
 function account(data,id,types){const a=data.accounts.find(a=>a.id===id && a.isActive!==false && types.includes(a.type));if(!a)throw Error('Choose an active account of the correct type.');return a;}
 function vendor(data,id){if(!data.vendors.some(v=>v.id===id))throw Error('Choose a vendor.');}
 export const unpaid=(data,invoice)=>dollars(cents(invoice.amount)-data.payments.filter(p=>p.invoiceId===invoice.id).reduce((n,p)=>n+cents(p.amount),0));
-export const saveVendor=(userId,input)=>transactModules(userId,data=>{
+export function saveVendorOperations(data,input){
  const name=clampStr(input.name,120);if(!name)throw Error('Enter a vendor name.');
  if(data.vendors.some(v=>v.id!==input.id && v.name.toLowerCase()===name.toLowerCase()))throw Error('A vendor with this name already exists.');
  return [put('vendors',{id:input.id || uid(),name,email:clampStr(input.email,160),notes:clampStr(input.notes,500)})];
-});
-export const postInvoice=(userId,input)=>transactModules(userId,data=>{
+}
+export const saveVendor=(userId,input)=>transactModules(userId,data=>saveVendorOperations(data,input));
+export function postInvoiceOperations(data,input){
  vendor(data,input.vendorId);account(data,input.expenseAccount,['Expense']);account(data,input.payableAccount,['Liability']);
  const number=clampStr(input.number,80),amount=moneyValue(input.amount,true);
  if(!number)throw Error('Enter an invoice number.');
@@ -24,8 +26,9 @@ export const postInvoice=(userId,input)=>transactModules(userId,data=>{
  const memo=clampStr(input.memo || `Invoice ${number}`,500);
  const ops=journalOperations(data,{date:input.date,ref:number,memo,lines:[{accountId:input.expenseAccount,debit:amount},{accountId:input.payableAccount,credit:amount}]},'invoice');
  return [...ops,put('invoices',{id:uid(),vendorId:input.vendorId,number,date:input.date,dueDate:input.dueDate,amount,memo,expenseAccount:input.expenseAccount,payableAccount:input.payableAccount,headerId:ops[0].data.id})];
-});
-export const payInvoice=(userId,input)=>transactModules(userId,data=>{
+}
+export const postInvoice=(userId,input)=>transactModules(userId,data=>postInvoiceOperations(data,input));
+export function payInvoiceOperations(data,input){
  const invoice=data.invoices.find(i=>i.id===input.invoiceId);if(!invoice)throw Error('Invoice not found.');
  const amount=moneyValue(input.amount,true);account(data,input.paymentAccount,['Asset','Liability']);
  if(input.paymentAccount===invoice.payableAccount)throw Error('Payment account must differ from accounts payable.');
@@ -33,8 +36,9 @@ export const payInvoice=(userId,input)=>transactModules(userId,data=>{
  if(input.date<invoice.date)throw Error('Payment cannot predate the invoice.');
  const ops=journalOperations(data,{date:input.date,ref:clampStr(input.reference,100),memo:`Payment for invoice ${invoice.number}`,lines:[{accountId:invoice.payableAccount,debit:amount},{accountId:input.paymentAccount,credit:amount}]},'invoice-payment');
  return [...ops,put('payments',{id:uid(),invoiceId:invoice.id,date:input.date,amount,paymentAccount:input.paymentAccount,reference:clampStr(input.reference,100),headerId:ops[0].data.id})];
-});
-export const postExpense=(userId,input)=>transactModules(userId,data=>{
+}
+export const payInvoice=(userId,input)=>transactModules(userId,data=>payInvoiceOperations(data,input));
+export function postExpenseOperations(data,input){
  account(data,input.expenseAccount,['Expense']);account(data,input.paymentAccount,['Asset','Liability']);
  const amount=moneyValue(input.amount,true),payee=clampStr(input.payee,120);if(!payee)throw Error('Enter a payee.');
  if(!['bank','debit','credit','cash'].includes(input.method))throw Error('Choose a payment method.');
@@ -42,38 +46,26 @@ export const postExpense=(userId,input)=>transactModules(userId,data=>{
  const memo=clampStr(input.memo || payee,500);
  const ops=journalOperations(data,{date:input.date,ref:clampStr(input.reference,100),memo,lines:[{accountId:input.expenseAccount,debit:amount},{accountId:input.paymentAccount,credit:amount}]},'expense');
  return [...ops,put('expenses',{id:uid(),date:input.date,amount,payee,memo,method:input.method,expenseAccount:input.expenseAccount,paymentAccount:input.paymentAccount,headerId:ops[0].data.id})];
-});
-export const postTransfer=(userId,input)=>transactModules(userId,data=>{
+}
+export const postExpense=(userId,input)=>transactModules(userId,data=>postExpenseOperations(data,input));
+export function postTransferOperations(data,input){
  account(data,input.fromAccount,['Asset']);account(data,input.toAccount,['Asset','Liability']);
  if(input.fromAccount===input.toAccount)throw Error('Choose two different accounts.');
  const amount=moneyValue(input.amount,true);
  return journalOperations(data,{date:input.date,ref:input.reference,memo:input.memo || 'Transfer / credit card payment',lines:[{accountId:input.toAccount,debit:amount},{accountId:input.fromAccount,credit:amount}]},'transfer');
-});
+}
+export const postTransfer=(userId,input)=>transactModules(userId,data=>postTransferOperations(data,input));
 // RFC-style CSV quoting, including embedded commas and newlines; no code evaluation.
 export function parseStatementCSV(text){
- if(text.length>1000000)throw Error('CSV must be under 1 MB.');
- const records=[];let row=[],cell='',quoted=false;
- text=text.replace(/^\uFEFF/,'');
- for(let i=0;i<text.length;i++){
-  const c=text[i];
-  if(c==='"'){if(quoted && text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}
-  else if(c===',' && !quoted){row.push(cell);cell='';}
-  else if((c==='\n' || c==='\r') && !quoted){if(c==='\r' && text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))records.push(row);row=[];cell='';}
-  else cell+=c;
- }
- if(quoted)throw Error('CSV has an unclosed quoted field.');
- row.push(cell);if(row.some(v=>v.trim()))records.push(row);
- const heads=records.shift()?.map(x=>x.trim().toLowerCase()) || [];
- if(!['date','description','amount'].every(x=>heads.includes(x)))throw Error('CSV needs date,description,amount headers.');
- if(!records.length || records.length>2000)throw Error('Import between 1 and 2,000 statement rows.');
- return records.map((r,i)=>{
-  if(r.length!==heads.length)throw Error(`CSV row ${i+2} has the wrong number of columns.`);
-  const date=r[heads.indexOf('date')].trim(),description=clampStr(r[heads.indexOf('description')],300),amount=moneyValue(r[heads.indexOf('amount')].trim().replace(/,/g,''));
-  if(!validDate(date) || !description || cents(amount)===0)throw Error(`Invalid date, description, or zero amount on CSV row ${i+2}. Use YYYY-MM-DD dates.`);
+ const parsed=readCSV(text,{maxRows:2000,maxBytes:1000000});
+ if(!['date','description','amount'].every(x=>parsed.headers.includes(x)))throw Error('CSV needs date,description,amount headers.');
+ return parsed.records.map(({values:r,line})=>{
+  const date=r.date,description=clampStr(r.description,300),amount=moneyValue(r.amount.replace(/,/g,''));
+  if(!validDate(date) || !description || cents(amount)===0)throw Error(`Invalid date, description, or zero amount on CSV line ${line}. Use YYYY-MM-DD dates.`);
   return {id:uid(),date,description,amount,bookLineId:''};
  });
 }
-export const importStatement=(userId,input)=>transactModules(userId,data=>{
+export function importStatementOperations(data,input){
  account(data,input.accountId,['Asset','Liability']);
  if(!validDate(input.start) || !validDate(input.end) || input.start>input.end)throw Error('Choose a valid statement date range.');
  const rows=parseStatementCSV(input.csv),opening=moneyValue(input.opening),closing=moneyValue(input.closing);
@@ -82,7 +74,8 @@ export const importStatement=(userId,input)=>transactModules(userId,data=>{
  if(data.statements.some(s=>s.accountId===input.accountId && s.start===input.start && s.end===input.end))throw Error('A statement for this account and period already exists.');
  if(data.reconciliations.some(r=>r.accountId===input.accountId && input.start<=r.end))throw Error('This period overlaps a completed reconciliation.');
  return [put('statements',{id:uid(),accountId:input.accountId,start:input.start,end:input.end,opening,closing,name:clampStr(input.name || 'Imported statement',120),rows,status:'open'})];
-});
+}
+export const importStatement=(userId,input)=>transactModules(userId,data=>importStatementOperations(data,input));
 export function bookTransactions(data,accountId,end){
  const a=data.accounts.find(a=>a.id===accountId),heads=new Map(data.journalHeaders.map(h=>[h.id,h]));
  return data.journalLines.filter(l=>l.accountId===accountId && heads.get(l.headerId)?.date<=end).map(l=>({...l,date:heads.get(l.headerId).date,memo:heads.get(l.headerId).memo,amount:dollars((a.normalBalance==='Debit'?1:-1)*(cents(l.debit)-cents(l.credit)))})).sort((a,b)=>a.date.localeCompare(b.date));
@@ -126,4 +119,12 @@ export const openingReconciliation=(userId,input)=>transactModules(userId,data=>
 export const deleteStatement=(userId,id)=>transactModules(userId,data=>{
  if(!data.statements.some(s=>s.id===id && s.status==='open'))throw Error('Only open statements can be removed.');
  return [{type:'delete',collection:'statements',id2:id}];
+});
+export const postReconciliationAdjustment=(userId,input)=>transactModules(userId,data=>{
+ const bank=account(data,input.accountId,['Asset','Liability']);
+ account(data,input.offsetAccount,['Asset','Liability','Equity','Revenue','Expense']);
+ if(input.offsetAccount===bank.id)throw Error('Choose a different offset account.');
+ const amount=moneyValue(input.amount);if(!amount)throw Error('Adjustment cannot be zero.');
+ const bankDebit=(bank.normalBalance==='Debit'?1:-1)*cents(amount)>0,absolute=Math.abs(amount);
+ return journalOperations(data,{date:input.date,ref:input.reference,memo:input.memo,lines:[{accountId:bank.id,debit:bankDebit?absolute:0,credit:bankDebit?0:absolute},{accountId:input.offsetAccount,debit:bankDebit?0:absolute,credit:bankDebit?absolute:0}]},'reconciliation-adjustment');
 });
