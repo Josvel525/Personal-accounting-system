@@ -1,16 +1,20 @@
 import { wireAuthUI } from './auth.js';
 import { loadAll, LOCAL_UID, signOutUser, exportData, importLocalBackup, checkLocalStorage, storageProtection } from './db.js';
 import { createUI } from './ui.js';
+import {MODULES} from './navigation.js';
 
 const $=id=>document.getElementById(id);
 const state={user:null,route:'dashboard',data:{accounts:[],journalHeaders:[],journalLines:[]},status:null};
 let toastTimer, generation=0;
 const menuButton=$('btnMenu'), menuPanel=$('navigationPanel'), menuSearch=$('menuSearch');
+const navigation=document.querySelector('.nav');
+navigation.innerHTML='<button class="navItem" data-route="dashboard">Dashboard</button>'+MODULES.map(m=>`<button class="navItem" data-route="${m.id}">${m.name}</button>`).join('');
+document.querySelector('.menuColumns').innerHTML=MODULES.filter(m=>m.pages.length).map(m=>`<section data-menu-column="${m.id}"><h3>${m.name}</h3>${m.pages.map(([id,label])=>`<button class="menuLink" data-route="${id}">${label}</button>`).join('')}</section>`).join('')+'<section data-menu-column="setup"><h3>Control center</h3><button class="menuLink" data-route="settings">Master Settings</button><button class="menuLink" id="menuSettings">Backups &amp; storage</button></section>';
 let menuSetup=false;
 function filterMenu(){
   const query=menuSearch.value.trim().toLowerCase();
   for(const button of menuPanel.querySelectorAll('.navItem,.menuLink'))button.hidden=!button.textContent.toLowerCase().includes(query);
-  $('menuEmpty').hidden=!!menuPanel.querySelector('.navItem:not([hidden])');
+  $('menuEmpty').hidden=!!menuPanel.querySelector('.navItem:not([hidden]),.menuLink:not([hidden])');
   for(const column of menuPanel.querySelectorAll('[data-menu-column]'))column.hidden=(menuSetup && column.dataset.menuColumn!=='setup') || !column.querySelector('.menuLink:not([hidden])');
 }
 function setMenu(open,returnFocus=false){
@@ -22,9 +26,9 @@ function setMenu(open,returnFocus=false){
   if(returnFocus)menuButton.focus();
 }
 menuButton.onclick=()=>setMenu(menuPanel.hidden);
-menuButton.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden])')?.focus();}});
+menuButton.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden]),.menuLink:not([hidden])')?.focus();}});
 menuSearch.oninput=()=>{setMenu(true);filterMenu();};
-menuSearch.onkeydown=e=>{if(e.key==='ArrowDown' || e.key==='Enter'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden])')?.focus();}};
+menuSearch.onkeydown=e=>{if(e.key==='ArrowDown' || e.key==='Enter'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden]),.menuLink:not([hidden])')?.focus();}};
 for(const [id,setup] of [['btnMenuAll',false],['btnMenuSetup',true]])$(id).onclick=()=>{
   menuSetup=setup;
   for(const button of document.querySelectorAll('.menuTab')){const selected=button.id===id;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}
@@ -53,7 +57,7 @@ state.reload=async()=>{
   state.data=result.data;state.status=result;
   $('syncText').textContent=result.source==='local'?'Saved on this device':result.error?`${result.pending} pending • Sync unavailable`:'Cloud synced';
   $('syncDot').style.background=result.error?'var(--warn)':'var(--good)';
-  $('statusNotice').textContent=result.source==='local'?'Local mode: these books stay in this browser and do not sync to your other devices. Export a backup in Settings.':result.error || '';
+  $('statusNotice').textContent=result.source==='local'?'Local mode: these books stay in this browser and do not sync to your other devices. Export a backup using Backups.':result.error || '';
   $('statusNotice').hidden=!$('statusNotice').textContent;
   render();
 };
@@ -67,7 +71,7 @@ async function enter(user){
 }
 function signedOut(){
   generation++;state.journalDirty=false;state.user=null;state.data={accounts:[],journalHeaders:[],journalLines:[]};
-  $('currentSection').textContent='Welcome';setMenu(false);$('routeHost').replaceChildren();$('authGate').style.display='block';$('appViews').style.display='none';
+  $('currentSection').textContent='Welcome';document.querySelector('.brandTitle').textContent='Personal Accounting';setMenu(false);$('routeHost').replaceChildren();$('authGate').style.display='block';$('appViews').style.display='none';
   $('btnSignOut').style.display='none';$('brandSub').textContent='Personal books • Double-entry';$('syncText').textContent='Choose local or cloud';
 }
 $('btnLocal').onclick=async()=>{
@@ -77,12 +81,13 @@ $('btnSignOut').onclick=async()=>{
   if(state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
   try{if(state.user?.uid!==LOCAL_UID)await signOutUser();localStorage.removeItem('pa_mode');signedOut();}catch(e){toast(e.message,'bad');}
 };
-for(const btn of document.querySelectorAll('.navItem,[data-go]'))btn.onclick=()=>{
+for(const btn of document.querySelectorAll('[data-route],[data-go]'))btn.onclick=()=>{
   if(!state.user){toast('Choose local mode or sign in first.');return;}
-  if(state.route==='journal' && state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
+  if(state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
   state.journalDirty=false;state.route=btn.dataset.route || btn.dataset.go;render();setMenu(false);const heading=document.querySelector('#routeHost h2');if(heading){heading.tabIndex=-1;heading.focus();}
 };
-$('btnSettings').onclick=()=>{
+$('btnSettings').onclick=()=>{if(!state.user){$('btnBackups').click();return;}if(state.journalDirty && !confirm('Leave unsaved changes?'))return;state.journalDirty=false;state.route='settings';render();setMenu(false);};
+$('btnBackups').onclick=()=>{
   const body=$('modalBody'),footer=$('modalFooter');body.replaceChildren();footer.replaceChildren();
   $('modalTitle').textContent='Settings & backups';
   const note=document.createElement('p');note.textContent=state.user?.uid===LOCAL_UID?'Local books are stored on this browser. Clearing browser data removes them. Download regular backups.':state.user?'Cloud books use your Firebase account. Export includes locally saved changes awaiting sync.':'Choose local mode or sign in to manage your books.';body.append(note);
@@ -110,7 +115,7 @@ $('btnSettings').onclick=()=>{
   }
   $('modalBackdrop').style.display='flex';$('modalClose').focus();
 };
-$('menuSettings').onclick=()=>{setMenu(false);$('btnSettings').click();};
+$('menuSettings').onclick=()=>{setMenu(false);$('btnBackups').click();};
 $('modalClose').onclick=()=>$('modalBackdrop').style.display='none';
 $('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))$('modalClose').click();};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modalClose').click();});

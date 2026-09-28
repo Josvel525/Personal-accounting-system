@@ -7,10 +7,10 @@ const context=await browser.newContext({viewport:{width:390,height:844},acceptDo
 const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 page.on('dialog',d=>d.accept());
 const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:4173';
+const routes={'Dashboard':'dashboard','Journal Entry':'journal','General Ledger':'ledger','Trial Balance':'trial','Balance Sheet':'bs','Income Statement':'is','Chart of Accounts':'coa'};
 const nav=async(name)=>{
- const button=page.getByRole('button',{name,exact:true});
- if(['Dashboard','Journal Entry','General Ledger','Trial Balance','Balance Sheet','Income Statement','Chart of Accounts'].includes(name))await page.locator('#btnMenu').click();
- await button.click();
+ if(routes[name]){await page.locator('#btnMenu').click();await page.locator(`#navigationPanel [data-route="${routes[name]}"]`).first().click();}
+ else await page.getByRole('button',{name,exact:true}).click();
 };
 try{
  await page.goto(base);await nav('Use on this device');await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
@@ -41,7 +41,7 @@ try{
  await cashRow.getByRole('button',{name:'Delete',exact:true}).click();await page.getByText('This account has posted entries. Disable it to preserve its history.',{exact:true}).waitFor();
  await cashRow.getByRole('button',{name:'Disable',exact:true}).click();await nav('Trial Balance');await page.getByText('Debits equal credits',{exact:true}).waitFor();
  // Backup contains durable records, and refresh/offline launch preserve them.
- await nav('Settings');const downloadPromise=page.waitForEvent('download');await nav('Export backup');const download=await downloadPromise;const backupPath=await download.path();
+ await nav('Backups');const downloadPromise=page.waitForEvent('download');await nav('Export backup');const download=await downloadPromise;const backupPath=await download.path();
  const fs=await import('node:fs/promises');const backup=JSON.parse(await fs.readFile(backupPath,'utf8'));assert.equal(backup.data.journalHeaders.length,3);
  await page.locator('#modalClose').click();await page.reload();await page.getByText('3 posted entries',{exact:true}).waitFor();
  await page.evaluate(()=>navigator.serviceWorker.ready);await context.setOffline(true);await page.reload();await page.getByText('3 posted entries',{exact:true}).waitFor();await nav('Balance Sheet');await page.getByText('Balance sheet balances',{exact:true}).waitFor();
@@ -69,12 +69,12 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No page overflow at ${width}px`);
  }
  await page.getByLabel('Search menu',{exact:true}).fill('balance');
- assert.equal(await page.locator('.navItem:visible').count(),2);
- await page.keyboard.press('ArrowDown');assert.equal(await page.locator('.navItem:focus').count(),1);
+ assert.equal(await page.locator('.menuLink:visible').count(),2);
+ await page.keyboard.press('ArrowDown');assert.equal(await page.locator('.menuLink:focus,.navItem:focus').count(),1);
  await page.keyboard.press('Escape');assert.equal(await page.locator('#navigationPanel').isVisible(),false);
  // Restore into an independent empty browser, not over existing books.
  const restoreContext=await browser.newContext();const restorePage=await restoreContext.newPage();await restorePage.goto(base);await restorePage.getByRole('button',{name:'Use on this device',exact:true}).click();
- await restorePage.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();await restorePage.getByRole('button',{name:'Settings',exact:true}).click();
+ await restorePage.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();await restorePage.getByRole('button',{name:'Backups',exact:true}).click();
  await restorePage.locator('input[type=file]').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(backup))});await restorePage.getByText('3 posted entries',{exact:true}).waitFor();await restoreContext.close();
  assert.deepEqual(errors,[]);console.log('PASS: mobile navigation, accounts, HTML escaping, journal posting, reports, dated ledger, deletion guard, disabled history, backup export/restore, reload persistence, offline launch, no browser errors.');
 }finally{await browser.close();}

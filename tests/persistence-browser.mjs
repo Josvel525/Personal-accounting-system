@@ -31,7 +31,7 @@ try{
  await page.getByText('1 posted entries',{exact:true}).waitFor();
  const after=await page.evaluate(async()=>{const db=await import('./db.js');return (await db.exportData(db.LOCAL_UID)).data;});
  assert.deepEqual(after,before);
- await page.getByRole('button',{name:'Settings',exact:true}).click();
+ await page.getByRole('button',{name:'Backups',exact:true}).click();
  assert.match(await page.locator('.storageInfo').innerText(),/Local database: available/);
  // A blocked preview must fail visibly rather than opening apparently saveable books.
  const blocked=await chromium.launch({headless:true});

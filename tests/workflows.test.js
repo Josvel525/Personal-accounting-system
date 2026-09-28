@@ -20,7 +20,7 @@ test('complete local UI and persistence workflows with real DOM events and Index
  document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
  assert.equal($('#navigationPanel').hidden,true);assert.equal(document.activeElement,$('#btnMenu'));
  click('#btnMenu');document.body.click();assert.equal($('#navigationPanel').hidden,true);
- fill('#menuSearch','balance');assert.equal($('#navigationPanel').hidden,false);assert.equal(document.querySelectorAll('.navItem:not([hidden])').length,2);
+ fill('#menuSearch','balance');assert.equal($('#navigationPanel').hidden,false);assert.equal(document.querySelectorAll('.menuLink:not([hidden])').length,2);
  fill('#menuSearch','no such page');assert.equal($('#menuEmpty').hidden,false);
  document.body.click();assert.equal($('#menuSearch').value,'');
  click('#btnMenu');click('#btnMenuSetup');assert.equal(document.querySelector('[data-menu-column="reports"]').hidden,true);

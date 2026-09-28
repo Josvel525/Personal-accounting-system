@@ -1,0 +1,64 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {indexedDB} from 'fake-indexeddb';
+import * as db from '../db.js';
+import * as op from '../operations.js';
+import {trialBalance,incomeStatement,cents} from '../accounting.js';
+import {periodStart,settingsFor} from '../settings.js';
+Object.defineProperty(globalThis,'indexedDB',{value:indexedDB,configurable:true});
+Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});
+const user=db.LOCAL_UID;
+const data=async()=>(await db.exportData(user)).data;
+test('integrated invoices, expenses, matching, reconciliation, settings, and versioned backups',async()=>{
+ await db.createStarterAccounts(user);
+ await db.saveAccount(user,{id:'ap',code:'2100',name:'Accounts payable',type:'Liability',normalBalance:'Credit',isActive:true});
+ let d=await data();const id=code=>d.accounts.find(a=>a.code===code).id;
+ const bank=id('1000'),card=id('2000'),expense=id('5100'),capital=id('3000');
+ await db.postEntry(user,{date:'2026-01-01',memo:'Opening',lines:[{accountId:bank,debit:1000},{accountId:capital,credit:1000}]});
+ await op.saveVendor(user,{name:'Test vendor'});d=await data();const vendorId=d.vendors[0].id;
+ await op.postInvoice(user,{vendorId,number:'INV-1',date:'2026-02-01',dueDate:'2026-02-28',amount:'100.00',expenseAccount:expense,payableAccount:'ap'});
+ await assert.rejects(op.postInvoice(user,{vendorId,number:'inv-1',date:'2026-02-01',dueDate:'2026-02-28',amount:100,expenseAccount:expense,payableAccount:'ap'}),/already been posted/);
+ d=await data();const invoiceId=d.invoices[0].id;
+ await op.payInvoice(user,{invoiceId,date:'2026-02-02',amount:'40',paymentAccount:bank});
+ await assert.rejects(op.payInvoice(user,{invoiceId,date:'2026-02-03',amount:'61',paymentAccount:bank}),/exceeds/);
+ await op.payInvoice(user,{invoiceId,date:'2026-02-03',amount:'60',paymentAccount:bank});
+ await assert.rejects(op.payInvoice(user,{invoiceId,date:'2026-02-04',amount:'1',paymentAccount:bank}),/exceeds/);
+ await op.postExpense(user,{date:'2026-02-04',payee:'Grocer',amount:'25',expenseAccount:expense,paymentAccount:bank,method:'debit'});
+ await op.postExpense(user,{date:'2026-02-05',payee:'Card merchant',amount:'30',expenseAccount:expense,paymentAccount:card,method:'credit'});
+ await assert.rejects(op.postExpense(user,{date:'2026-02-05',payee:'Wrong type',amount:'30',expenseAccount:expense,paymentAccount:bank,method:'credit'}),/correct type/);
+ await op.postTransfer(user,{date:'2026-02-06',fromAccount:bank,toAccount:card,amount:'30'});
+ d=await data();assert.equal(op.unpaid(d,d.invoices[0]),0);assert.equal(incomeStatement(d.accounts,d.journalHeaders,d.journalLines).totalExpense,155);assert.equal(trialBalance(d.accounts,d.journalHeaders,d.journalLines).foots,true);
+ // Opening baseline must equal the books and cannot invent a balance.
+ await assert.rejects(op.openingReconciliation(user,{accountId:bank,end:'2026-01-31',closing:999}),/equal the book/);
+ await op.openingReconciliation(user,{accountId:bank,end:'2026-01-31',closing:1000});
+ const csv='date,description,amount\n2026-02-02,Invoice part 1,-40\n2026-02-03,Invoice part 2,-60\n2026-02-04,Grocer,-25\n2026-02-06,Card payment,-30';
+ await op.importStatement(user,{accountId:bank,start:'2026-02-01',end:'2026-02-28',opening:1000,closing:845,csv});
+ d=await data();let statement=d.statements[0];
+ await assert.rejects(op.finishReconciliation(user,statement.id),/Match every/);
+ await assert.rejects(op.importStatement(user,{accountId:bank,start:'2026-02-01',end:'2026-02-28',opening:1000,closing:845,csv}),/already exists/);
+ const books=op.bookTransactions(d,bank,statement.end);
+ for(const row of statement.rows){const book=books.find(b=>b.date===row.date && cents(b.amount)===cents(row.amount));await op.matchStatementRow(user,statement.id,row.id,book.id);}
+ d=await data();assert.equal(op.reconciliationCheck(d,d.statements[0]).difference,0);
+ await op.finishReconciliation(user,statement.id);
+ await assert.rejects(op.deleteStatement(user,statement.id),/Only open/);
+ await assert.rejects(db.postEntry(user,{date:'2026-02-15',memo:'Backdate',lines:[{accountId:expense,debit:1},{accountId:bank,credit:1}]}),/completed reconciliation/);
+ // Credit-card statement: charges positive, payments negative.
+ await op.importStatement(user,{accountId:card,start:'2026-02-01',end:'2026-02-28',opening:0,closing:0,csv:'date,description,amount\n2026-02-05,Card charge,30\n2026-02-06,Card payment,-30'});
+ d=await data();statement=d.statements[1];const cardBooks=op.bookTransactions(d,card,statement.end);
+ for(const row of statement.rows)await op.matchStatementRow(user,statement.id,row.id,cardBooks.find(b=>cents(b.amount)===cents(row.amount)).id);
+ await op.finishReconciliation(user,statement.id);
+ await db.saveSettings(user,{bookName:'Test books',closedThrough:'2026-02-28',requireMemo:true,expenseAccount:expense,paymentAccount:bank,payableAccount:'ap',fiscalMonth:7});
+ await assert.rejects(db.postEntry(user,{date:'2026-02-28',memo:'Closed',lines:[{accountId:expense,debit:1},{accountId:capital,credit:1}]}),/period is closed/);
+ await assert.rejects(db.postEntry(user,{date:'2026-03-01',lines:[{accountId:expense,debit:1},{accountId:capital,credit:1}]}),/memo is required/);
+ const backup=await db.exportData(user);assert.equal(backup.version,2);assert.equal(db.validateBackup(backup).reconciliations.length,3);assert.equal(settingsFor(backup.data).bookName,'Test books');
+ const bad=structuredClone(backup);bad.data.invoices[0].amount=1;assert.throws(()=>db.validateBackup(bad),/Backup:/);
+ const invalidMatch=structuredClone(backup);invalidMatch.data.statements[0].rows[0].bookLineId='missing';assert.throws(()=>db.validateBackup(invalidMatch),/match/);
+ const legacy={version:1,data:{accounts:[],journalHeaders:[],journalLines:[]}};assert.deepEqual(db.validateBackup(legacy).invoices,[]);
+});
+test('CSV parser handles quoted descriptions and rejects malformed amounts and dates',()=>{
+ assert.equal(op.parseStatementCSV('date,description,amount\r\n2026-01-01,"Store, north",-1.25')[0].description,'Store, north');
+ assert.throws(()=>op.parseStatementCSV('date,description,amount\n2026-02-30,Invalid,2'),/Invalid date/);
+ assert.throws(()=>op.parseStatementCSV('date,description,amount\n2026-02-01,Invalid,2.001'),/amount/);
+ assert.throws(()=>op.parseStatementCSV('date,description,amount\n2026-02-01,"Invalid,2'),/unclosed/);
+ assert.equal(periodStart('fiscal','2026-02-01',7),'2025-07-01');
+});
