@@ -4,7 +4,7 @@ import {TYPES,normalizeAccounts,accountBalances,trialBalance,balanceSheet,income
 const money=n=>fmt.money(n);
 const accountLabel=a=>`${a.code ? a.code+' · ' : ''}${a.name}`;
 const emptyRow=(text,cols)=>`<tr><td colspan="${cols}" class="muted">${esc(text)}</td></tr>`;
-const table=(heads,body)=>`<div class="tableWrap"><table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+const table=(heads,body)=>`<div class="tableWrap" tabindex="0" role="region" aria-label="Accounting table; scroll horizontally for more columns"><table class="table"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 const stat=(label,value)=>`<div><div class="small">${label}</div><div class="bigNumber">${money(value)}</div></div>`;
 export function createUI(state,{toast}) {
   const host=document.getElementById('routeHost'),data=state.data;
@@ -111,19 +111,37 @@ export function createUI(state,{toast}) {
   }
   function accounts(){
     const root=card('Chart of Accounts','Manage accounts. Disabled accounts remain in reports; accounts with entries cannot be deleted.');
-    const form=el(`<form class="accountForm"><h3 data-title>Add account</h3><div class="grid2"><div class="field"><label for="accountCode">Code</label><input id="accountCode" maxlength="30"></div><div class="field"><label for="accountName">Name</label><input id="accountName" maxlength="120" required></div><div class="field"><label for="accountType">Type</label><select id="accountType">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="field"><label for="accountNormal">Normal balance</label><select id="accountNormal"><option>Debit</option><option>Credit</option></select></div></div><div class="row sectionSpace"><button class="btn" type="submit">Save account</button><button class="btn ghost" type="button" data-cancel hidden>Cancel edit</button></div></form>`);
+    const form=el(`<form class="accountForm" hidden><h3 data-title>Add account</h3><div class="grid2"><div class="field"><label for="accountCode">Code</label><input id="accountCode" maxlength="30"></div><div class="field"><label for="accountName">Name</label><input id="accountName" maxlength="120" required></div><div class="field"><label for="accountType">Type</label><select id="accountType">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div><div class="field"><label for="accountNormal">Normal balance</label><select id="accountNormal"><option>Debit</option><option>Credit</option></select></div></div><div class="row sectionSpace"><button class="btn" type="submit">Save account</button><button class="btn ghost" type="button" data-cancel hidden>Cancel edit</button></div></form>`);
     let editing=null;
     const f=id=>form.querySelector('#'+id);
     f('accountType').onchange=()=>f('accountNormal').value=['Asset','Expense'].includes(f('accountType').value)?'Debit':'Credit';
     form.onsubmit=e=>{e.preventDefault();return save(form.querySelector('[type=submit]'),()=>saveAccount(state.user.uid,{
       ...(editing || {}),code:f('accountCode').value,name:f('accountName').value,type:f('accountType').value,normalBalance:f('accountNormal').value,isActive:editing?.isActive!==false
     }),'Account saved.');};
-    form.querySelector('[data-cancel]').onclick=()=>render();root.append(form);
+    form.querySelector('[data-cancel]').onclick=()=>render();
+    const actions=el('<div class="headerActions row"><button class="btn" type="button" data-add-account>Add account</button><button class="btn" type="button" data-print-accounts>Print</button></div>');
+    root.querySelector('.cardHeader').append(actions);
+    actions.querySelector('[data-add-account]').onclick=()=>{form.hidden=false;form.querySelector('[data-cancel]').hidden=false;f('accountCode').focus();};
+    actions.querySelector('[data-print-accounts]').onclick=()=>window.print();
+    const search=el(`<div class="row filters accountFilters"><div class="field"><label for="accountSearch">Search accounts</label><input id="accountSearch" type="search" placeholder="Account code or name"></div><div class="field"><label for="accountStatus">Status</label><select id="accountStatus"><option value="all">All accounts</option><option value="active">Active accounts</option><option value="disabled">Disabled accounts</option></select></div><span class="accountCount" role="status"></span></div>`);
+    root.append(search,form);
     if(!data.accounts.length)starter(root);
     const balances=accountBalances(...reports());
     const tbl=el(table(['Code','Name','Type','Balance','Status','Actions'],data.accounts.map(a=>`<tr><td>${esc(a.code)}</td><td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${money(balances.get(a.id)?.balance || 0)}</td><td>${a.isActive===false?'Disabled':'Active'}</td><td><div class="row"><button class="btn ghost" data-edit="${esc(a.id)}">Edit</button><button class="btn ghost" data-toggle="${esc(a.id)}">${a.isActive===false?'Enable':'Disable'}</button><button class="btn ghost" data-delete="${esc(a.id)}">Delete</button></div></td></tr>`).join('') || emptyRow('No accounts yet.',6)));
-    root.append(tbl);
-    for(const btn of tbl.querySelectorAll('[data-edit]'))btn.onclick=()=>{editing=data.accounts.find(a=>a.id===btn.dataset.edit);f('accountCode').value=editing.code || '';f('accountName').value=editing.name;f('accountType').value=editing.type;f('accountNormal').value=editing.normalBalance;form.querySelector('[data-title]').textContent='Edit account';form.querySelector('[data-cancel]').hidden=false;f('accountName').focus();};
+    tbl.classList.add('accountTable');root.append(el('<p class="tableHint">Swipe the table to see all columns.</p>'),tbl);
+    function filterAccounts(){
+      const query=search.querySelector('input').value.trim().toLowerCase(),status=search.querySelector('select').value;
+      let visible=0;
+      for(const row of tbl.querySelectorAll('tbody tr')){
+        const button=row.querySelector('[data-edit]');if(!button)continue;
+        const account=data.accounts.find(a=>a.id===button.dataset.edit);
+        row.hidden=!`${account.code} ${account.name}`.toLowerCase().includes(query) || (status==='active' && account.isActive===false) || (status==='disabled' && account.isActive!==false);
+        if(!row.hidden)visible++;
+      }
+      search.querySelector('.accountCount').textContent=`${visible} of ${data.accounts.length} accounts`;
+    }
+    search.querySelector('input').oninput=filterAccounts;search.querySelector('select').onchange=filterAccounts;filterAccounts();
+    for(const btn of tbl.querySelectorAll('[data-edit]'))btn.onclick=()=>{form.hidden=false;editing=data.accounts.find(a=>a.id===btn.dataset.edit);f('accountCode').value=editing.code || '';f('accountName').value=editing.name;f('accountType').value=editing.type;f('accountNormal').value=editing.normalBalance;form.querySelector('[data-title]').textContent='Edit account';form.querySelector('[data-cancel]').hidden=false;f('accountName').focus();};
     for(const btn of tbl.querySelectorAll('[data-toggle]'))btn.onclick=()=>{const a=data.accounts.find(a=>a.id===btn.dataset.toggle);save(btn,()=>saveAccount(state.user.uid,{...a,isActive:a.isActive===false}),'Account updated.');};
     for(const btn of tbl.querySelectorAll('[data-delete]'))btn.onclick=()=>{const a=data.accounts.find(a=>a.id===btn.dataset.delete);if(confirm(`Delete unused account “${a.name}”?`))save(btn,()=>deleteAccount(state.user.uid,a.id),'Account deleted.');};
     return root;

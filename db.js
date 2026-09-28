@@ -37,8 +37,8 @@ function openIDB() {
       if(!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv');
       if(!r.result.objectStoreNames.contains('queue')) r.result.createObjectStore('queue',{keyPath:'id'});
     };
-    r.onsuccess=()=>resolve(r.result); r.onerror=()=>{idbPromise=null;reject(r.error);};
-  });
+    r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
+  }).catch(error=>{idbPromise=null;throw error;});
   return idbPromise;
 }
 async function read(store,key) {
@@ -55,6 +55,26 @@ async function write(store,key,value) {
     if(value===undefined) st.delete(key); else if(st.keyPath) st.put(value); else st.put(value,key);
     tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error || Error('Local save aborted.'));
   });
+}
+// Confirm that this preview/browser can commit and read local records before opening books.
+export async function checkLocalStorage() {
+  const key=`storage-check:${idgen()}`;
+  try {
+    await write('kv',key,'ok');
+    if(await read('kv',key)!=='ok')throw Error('Local storage verification failed.');
+    await write('kv',key,undefined);
+  } catch(error) {
+    throw Error(`Local saving is unavailable in this preview. Open the project through a local web server or Safari and allow website storage. ${error.message}`);
+  }
+  return storageProtection();
+}
+export async function storageProtection(request=false) {
+  let persistent=false;
+  try {
+    if(request && navigator.storage?.persist)persistent=await navigator.storage.persist();
+    else if(navigator.storage?.persisted)persistent=await navigator.storage.persisted();
+  } catch { /* The committed IndexedDB save remains valid when this optional API is unavailable. */ }
+  return {persistent,canRequest:!!navigator.storage?.persist};
 }
 const snapshotKey=userId=>`${userId}:snapshot`;
 const lock=(userId,fn)=>navigator.locks ? navigator.locks.request(`pa:${userId}`,fn) : fn();

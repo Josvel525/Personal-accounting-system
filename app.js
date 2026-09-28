@@ -1,24 +1,40 @@
 import { wireAuthUI } from './auth.js';
-import { loadAll, LOCAL_UID, signOutUser, exportData, importLocalBackup } from './db.js';
+import { loadAll, LOCAL_UID, signOutUser, exportData, importLocalBackup, checkLocalStorage, storageProtection } from './db.js';
 import { createUI } from './ui.js';
 
 const $=id=>document.getElementById(id);
 const state={user:null,route:'dashboard',data:{accounts:[],journalHeaders:[],journalLines:[]},status:null};
 let toastTimer, generation=0;
-const menuButton=$('btnMenu'), menuPanel=$('navigationPanel');
+const menuButton=$('btnMenu'), menuPanel=$('navigationPanel'), menuSearch=$('menuSearch');
+let menuSetup=false;
+function filterMenu(){
+  const query=menuSearch.value.trim().toLowerCase();
+  for(const button of menuPanel.querySelectorAll('.navItem,.menuLink'))button.hidden=!button.textContent.toLowerCase().includes(query);
+  $('menuEmpty').hidden=!!menuPanel.querySelector('.navItem:not([hidden])');
+  for(const column of menuPanel.querySelectorAll('[data-menu-column]'))column.hidden=(menuSetup && column.dataset.menuColumn!=='setup') || !column.querySelector('.menuLink:not([hidden])');
+}
 function setMenu(open,returnFocus=false){
   menuPanel.hidden=!open;
   menuButton.setAttribute('aria-expanded',String(open));
   menuButton.setAttribute('aria-label',open?'Close navigation':'Open navigation');
-  if(open)menuPanel.style.setProperty('--menu-top',`${document.querySelector('.topbar').getBoundingClientRect().bottom+8}px`);
+  if(open){menuPanel.style.setProperty('--menu-top',`${document.querySelector('.appHeader').getBoundingClientRect().bottom}px`);filterMenu();}
+  else{menuSearch.value='';filterMenu();}
   if(returnFocus)menuButton.focus();
 }
 menuButton.onclick=()=>setMenu(menuPanel.hidden);
-menuButton.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem').focus();}});
+menuButton.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden])')?.focus();}});
+menuSearch.oninput=()=>{setMenu(true);filterMenu();};
+menuSearch.onkeydown=e=>{if(e.key==='ArrowDown' || e.key==='Enter'){e.preventDefault();setMenu(true);menuPanel.querySelector('.navItem:not([hidden])')?.focus();}};
+for(const [id,setup] of [['btnMenuAll',false],['btnMenuSetup',true]])$(id).onclick=()=>{
+  menuSetup=setup;
+  for(const button of document.querySelectorAll('.menuTab')){const selected=button.id===id;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}
+  filterMenu();
+};
 $('btnCloseMenu').onclick=()=>setMenu(false,true);
-document.addEventListener('click',e=>{if(!menuPanel.hidden && !menuPanel.contains(e.target) && !menuButton.contains(e.target))setMenu(false);});
+const inMenu=target=>menuPanel.contains(target) || menuButton.contains(target) || target===menuSearch;
+document.addEventListener('click',e=>{if(!menuPanel.hidden && !inMenu(e.target))setMenu(false);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape' && !menuPanel.hidden){e.preventDefault();setMenu(false,true);}});
-document.addEventListener('focusin',e=>{if(!menuPanel.hidden && !menuPanel.contains(e.target) && !menuButton.contains(e.target))setMenu(false);});
+document.addEventListener('focusin',e=>{if(!menuPanel.hidden && !inMenu(e.target))setMenu(false);});
 window.addEventListener('resize',()=>{if(!menuPanel.hidden)setMenu(true);});
 $('workspaceDate').textContent=new Intl.DateTimeFormat(undefined,{month:'long',day:'numeric',year:'numeric'}).format(new Date());
 
@@ -35,13 +51,14 @@ state.reload=async()=>{
   const result=await loadAll(user.uid);
   if(token!==generation)return;
   state.data=result.data;state.status=result;
-  $('syncText').textContent=result.source==='local'?'Saved on this browser':result.error?`${result.pending} pending • Sync unavailable`:'Cloud synced';
+  $('syncText').textContent=result.source==='local'?'Saved on this device':result.error?`${result.pending} pending • Sync unavailable`:'Cloud synced';
   $('syncDot').style.background=result.error?'var(--warn)':'var(--good)';
   $('statusNotice').textContent=result.source==='local'?'Local mode: these books stay in this browser and do not sync to your other devices. Export a backup in Settings.':result.error || '';
   $('statusNotice').hidden=!$('statusNotice').textContent;
   render();
 };
 async function enter(user){
+  if(user.uid===LOCAL_UID)state.storage=await checkLocalStorage();
   generation++;state.user=user;state.route='dashboard';
   $('authGate').style.display='none';$('appViews').style.display='block';$('btnSignOut').style.display='inline-flex';
   $('btnSignOut').textContent=user.uid===LOCAL_UID?'Exit local mode':'Sign out';
@@ -60,10 +77,10 @@ $('btnSignOut').onclick=async()=>{
   if(state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
   try{if(state.user?.uid!==LOCAL_UID)await signOutUser();localStorage.removeItem('pa_mode');signedOut();}catch(e){toast(e.message,'bad');}
 };
-for(const btn of document.querySelectorAll('.navItem'))btn.onclick=()=>{
+for(const btn of document.querySelectorAll('.navItem,[data-go]'))btn.onclick=()=>{
   if(!state.user){toast('Choose local mode or sign in first.');return;}
   if(state.route==='journal' && state.journalDirty && !confirm('Leave this unsaved journal entry?'))return;
-  state.journalDirty=false;state.route=btn.dataset.route;render();setMenu(false);const heading=document.querySelector('#routeHost h2');if(heading){heading.tabIndex=-1;heading.focus();}
+  state.journalDirty=false;state.route=btn.dataset.route || btn.dataset.go;render();setMenu(false);const heading=document.querySelector('#routeHost h2');if(heading){heading.tabIndex=-1;heading.focus();}
 };
 $('btnSettings').onclick=()=>{
   const body=$('modalBody'),footer=$('modalFooter');body.replaceChildren();footer.replaceChildren();
@@ -80,10 +97,20 @@ $('btnSettings').onclick=()=>{
       const input=document.createElement('input');input.type='file';input.accept='.json,application/json';
       input.onchange=async()=>{try{if(!input.files[0])return;await importLocalBackup(LOCAL_UID,JSON.parse(await input.files[0].text()));await state.reload();$('modalBackdrop').style.display='none';toast('Backup restored.');}catch(e){toast(e.message,'bad');}finally{input.value='';}};
       label.append(input);body.append(label);
+      const details=document.createElement('div');details.className='storageInfo';
+      const storageText=()=>{details.textContent=`Local database: available. ${state.storage?.persistent?'Persistent storage granted.':'Storage is managed by this browser.'} Open these books in the same app/browser and at the same address: ${window.location.origin}. In Textastic, keep Random Port off (for example, port 8080). Clearing app/site data removes local records; export a backup to Files for safekeeping.`;};
+      storageText();body.append(details);
+      if(navigator.storage?.persist){
+        const protect=document.createElement('button');protect.className='btn';protect.textContent='Request persistent storage';
+        protect.onclick=async()=>{state.storage=await storageProtection(true);storageText();toast(state.storage.persistent?'Persistent storage granted. Keep backups too.':'This browser did not grant persistent storage. Local saving still works; keep backups in Files.');};
+        footer.prepend(protect);
+      }
+
     }
   }
   $('modalBackdrop').style.display='flex';$('modalClose').focus();
 };
+$('menuSettings').onclick=()=>{setMenu(false);$('btnSettings').click();};
 $('modalClose').onclick=()=>$('modalBackdrop').style.display='none';
 $('modalBackdrop').onclick=e=>{if(e.target===$('modalBackdrop'))$('modalClose').click();};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modalClose').click();});
